@@ -121,6 +121,43 @@ function defaultType(c, seen = new Set()) {
 }
 function effType(c, seen) { return c.type ? normType(c.type) : defaultType(c, seen); }
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+// A written type must be a real MariaDB type (plus our vc), so typos don't slip through:
+// "Name vc uniqie" would otherwise quietly become a column of type "vc uniqie".
+
+const SQL_TYPE_NAMES = new Set(`vc tinyint smallint mediumint int integer bigint decimal dec numeric fixed float
+double real bit bool boolean serial char varchar binary varbinary tinytext text mediumtext longtext tinyblob
+blob mediumblob longblob enum set date datetime timestamp time year json uuid inet4 inet6 geometry point
+linestring polygon`.split(/\s+/));
+const TYPE_MODIFIERS = new Set(['unsigned', 'signed', 'zerofill', 'precision']);
+const FLAG_WORDS = ['pk', 'null', 'unique'];
+
+// Levenshtein distance, for "did you mean …?"
+function editDistance(a, b) {
+  let row = [...Array(b.length + 1).keys()];
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+function closest(word, candidates) {
+  let best = null, dist = Infinity;
+  for (const c of candidates) { const d = editDistance(word, c); if (d < dist) { best = c; dist = d; } }
+  return dist <= Math.max(1, Math.floor(word.length / 3)) ? best : null;
+}
+
+// null if the type is fine, otherwise the problem to report
+function typeProblem(type) {
+  const words = type.toLowerCase().replace(/\([^)]*\)/g, '').trim().split(/\s+/);
+  const bad = [words[0], ...words.slice(1)].find((w, i) => !(i === 0 ? SQL_TYPE_NAMES.has(w) : TYPE_MODIFIERS.has(w)));
+  if (!bad) return null;
+  const orig = type.match(new RegExp(bad.replace(/[^\p{L}\p{N}_]/gu, ''), 'iu'))?.[0] ?? bad;
+  const guess = closest(bad, FLAG_WORDS) ?? closest(bad, [...SQL_TYPE_NAMES, ...TYPE_MODIFIERS]);
+  return `Unknown type ${orig}` + (guess ? `. Did you mean ${guess}?` : '');
+}
+
 function resolve(tables) {
   const problems = [];
   const exact = new Map(tables.map(t => [t.name, t]));
@@ -159,6 +196,10 @@ function resolve(tables) {
   for (const t of tables) {
     for (const c of t.cols) {
       c.effType = effType(c);
+      if (c.type) {
+        const bad = typeProblem(c.type);
+        if (bad) problems.push(problem(c.line, bad));
+      }
       c.isPk = t.pkCols.includes(c);
       c.autoInc = c.isPk && t.pkCols.length === 1 && isIdName(c.name) && INT_TYPES.has(c.effType.split(/[ (]/)[0]);
       if (c.isPk && c.nullable) problems.push(problem(c.line, `${c.name} is a primary key and can't be null`));

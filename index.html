@@ -224,10 +224,10 @@
     <div id="notationNote" class="note" role="dialog" aria-labelledby="noteTitle" hidden>
       <div class="note-title" id="noteTitle">This is an ER-style notation</div>
       <p>ER diagrams model any kind of system, before anyone has decided how it will be stored. That is why ER has 1‑1, 1‑N and N‑N relationships.</p>
-      <p>A SQL database is more concrete. It has tables with columns, and a foreign key is a column that points to a column in another table. Between two tables that is <b>always 1‑N</b>: many rows can hold the same key, and each of them points to exactly one row.</p>
+      <p>A SQL database is more concrete. It has tables with columns, and a foreign key is a column that points to a column in another table. That link is <b>1‑N</b> by nature: many rows can hold the same key, and each of them points to exactly one row.</p>
       <ul>
-        <li><b>N‑N</b> doesn't exist between two tables. It is always built as a junction table with two foreign keys.</li>
-        <li><b>1‑1</b> is usually just columns in the same table, or a foreign key marked <code>unique</code> (drawn here as 1‑1).</li>
+        <li><b>1‑1</b> is that same link narrowed: the foreign key is marked <code>unique</code>, so each key can appear only once (drawn here as 1‑1). Often those columns simply belong in the same table.</li>
+        <li><b>N‑N</b> doesn't exist between two tables. It is always built as a junction table with two foreign keys, in other words two 1‑N links.</li>
       </ul>
       <p><b>Why it's everywhere:</b> ER notation comes from 1970s design methods: Chen's ER model, and crow's feet from Information Engineering. The database design tools of the 80s and 90s kept those symbols when they started drawing real tables, and still call the result an "ER diagram". Textbooks and tutorials copied them, so that is what a web search shows.</p>
       <p>The arrows show exactly which column points to which, and that is what you need to write a JOIN. ER symbols only tell you that two tables are related.</p>
