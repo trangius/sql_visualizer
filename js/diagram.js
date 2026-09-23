@@ -78,7 +78,7 @@ function ensurePositions(tables, dims) {
     }
   }
   prevNames = [...names];
-  if (changed) store.set('pos', pos);
+  if (changed) saveDoc();
 }
 
 // Arrows leave the FK row horizontally and enter the Id row horizontally.
@@ -580,6 +580,7 @@ function applyView() {
   svg.style.backgroundSize = `${20 * view.s}px ${20 * view.s}px`;
   svg.style.backgroundPosition = `${view.tx}px ${view.ty}px`;
   $('#zoomLabel').textContent = Math.round(view.s * 100) + '%';
+  saveState(); // each diagram remembers its pan/zoom (the save is debounced)
 }
 function toWorld(e) {
   const r = svg.getBoundingClientRect();
@@ -674,7 +675,7 @@ svg.addEventListener('pointermove', e => {
 function endDrag() {
   if (!drag) return;
   if (drag.kind === 'box') {
-    if (drag.moved) { store.set('pos', pos); histCommit(); }
+    if (drag.moved) { saveDoc(); histCommit(); }
     else if (drag.line) selectLine(+drag.line);
     else {
       const t = model.tables.find(t => t.name === drag.name);
@@ -706,7 +707,7 @@ $('#fitBtn').onclick = fit;
 // Rearrange every table (the Auto layout button, loading an example, repairing overlaps)
 function autoLayout() {
   histRecord('layout', () => arrangeAll(model.tables, geometry.dims));
-  store.set('pos', pos);
+  saveDoc();
   drawDiagram();
 }
 $('#layoutBtn').onclick = () => { autoLayout(); fit(); };
@@ -779,7 +780,8 @@ function download(blob, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-const exportName = ext => (model.tables[0]?.name ?? 'diagram').toLowerCase() + '-diagram.' + ext;
+// files are named after the tab: "Skoldatabasen (schooldb)" → skoldatabasen-schooldb.svg
+const exportName = ext => ((activeDoc()?.name ?? 'diagram').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'diagram') + '.' + ext;
 
 async function exportSvg() {
   const m = await exportMarkup();

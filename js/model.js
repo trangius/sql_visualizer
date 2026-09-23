@@ -3,9 +3,11 @@
 // ─── Small helpers ───────────────────────────────────────────────────────────
 
 const $ = s => document.querySelector(s);
+// localStorage, under "sqlviz.*" keys. set() returns false when it couldn't save (e.g. storage full).
 const store = {
   get(k, d) { try { const v = localStorage.getItem('sqlviz.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('sqlviz.' + k, JSON.stringify(v)); } catch {} },
+  set(k, v) { try { localStorage.setItem('sqlviz.' + k, JSON.stringify(v)); return true; } catch { return false; } },
+  remove(k) { try { localStorage.removeItem('sqlviz.' + k); } catch {} },
 };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const IDENT = /^[\p{L}_][\p{L}\p{N}_$]*$/u;

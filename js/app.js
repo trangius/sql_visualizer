@@ -132,17 +132,69 @@ ta.addEventListener('input', () => {
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
+// Everything is saved in the browser's localStorage:
+//   sqlviz.settings   preferences shared by all tabs (style, colours, text size, notation, editor width)
+//   sqlviz.docs       the tabs: { list: [{ id, name }], active }
+//   sqlviz.doc.<id>   one diagram: text, SQL, mode, box positions and the view (pan/zoom)
+// `state` holds the preferences plus the active diagram's fields; `pos` its box positions.
+const SETTINGS = ['style', 'colors', 'fontSize', 'notation', 'panel', 'leftW'];
+// base: the text the diagram was created with (an example, or empty), to tell whether it has changed
+const DOC_DEFAULTS = { text: '', sql: '', mode: 'text', textStale: false, sqlStale: true, base: null };
+const docKey = id => 'doc.' + id;
+const newDocId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+// a new diagram is named after its first comment line ("# Skoldatabasen (schooldb)")
+const docNameFrom = text => (text.match(/^#\s*(.+)$/m)?.[1].trim().slice(0, 40)) || 'Untitled';
+
+let docs = store.get('docs', null);
+if (!docs?.list?.length) {
+  // first visit, or data saved by the single-diagram version: that becomes the first tab
+  const old = store.get('state', null);
+  const text = old?.text ?? EXAMPLES.school;
+  const id = newDocId();
+  store.set(docKey(id), { ...DOC_DEFAULTS, ...(old && Object.fromEntries(Object.keys(DOC_DEFAULTS).filter(k => k in old).map(k => [k, old[k]]))), text, base: old ? null : text, pos: store.get('pos', {}) });
+  if (old) store.set('settings', Object.fromEntries(SETTINGS.filter(k => k in old).map(k => [k, old[k]])));
+  docs = { list: [{ id, name: docNameFrom(text) }], active: id };
+  store.set('docs', docs);
+  store.remove('state');
+  store.remove('pos');
+}
+if (!docs.list.some(d => d.id === docs.active)) docs.active = docs.list[0].id;
+
 const state = Object.assign({
-  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', colors: 'bleak', fontSize: 13, notation: 'arrows', panel: 'mid', leftW: null,
-}, store.get('state', {}));
-let pos = store.get('pos', {});
+  style: 'classic', colors: 'bleak', fontSize: 13, notation: 'arrows', panel: 'mid', leftW: null, ...DOC_DEFAULTS,
+}, store.get('settings', {}));
+let pos = {};
+let docView = null; // the active diagram's saved pan/zoom, if any
 let model = { tables: [] };
 let prevNames = [];
 
+function readDoc(id) {
+  const d = store.get(docKey(id), {});
+  for (const k of Object.keys(DOC_DEFAULTS)) state[k] = d[k] ?? DOC_DEFAULTS[k];
+  pos = d.pos ?? {};
+  docView = d.view ?? null;
+}
+readDoc(docs.active);
+
+// Saving. A failed save (storage full) is reported once instead of losing work silently.
+let storageWarned = false;
+function persist(key, value) {
+  if (store.set(key, value) || storageWarned) return;
+  storageWarned = true;
+  toast('Could not save: the browser storage is full. Close some tabs you no longer need.');
+}
+function saveDoc() {
+  const d = { pos, view: { tx: view.tx, ty: view.ty, s: view.s } };
+  for (const k of Object.keys(DOC_DEFAULTS)) d[k] = state[k];
+  persist(docKey(docs.active), d);
+}
 let saveTimer = 0;
 function saveState() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => store.set('state', state), 250);
+  saveTimer = setTimeout(() => {
+    persist('settings', Object.fromEntries(SETTINGS.map(k => [k, state[k]])));
+    saveDoc();
+  }, 250);
 }
 
 function parseCurrent() {
@@ -235,18 +287,8 @@ function toast(msg, actLabel, act) {
 $('#examples').addEventListener('change', e => {
   const key = e.target.value, label = e.target.selectedOptions[0].textContent;
   e.target.selectedIndex = 0;
-  histRecord('example', () => {
-    state.text = EXAMPLES[key];
-    state.textStale = false;
-    state.sqlStale = true;
-    state.mode = 'text';
-    loadEditor();
-    autoLayout(); // an example always gets a fresh auto layout
-  });
-  setHelp(false);
-  fit();
-  saveState();
-  toast(`Loaded “${label}”`, 'Undo', () => { histUndo(); fit(); });
+  // an example opens in a new tab (with a fresh auto layout), so no work is overwritten
+  newDoc(label, EXAMPLES[key]);
 });
 
 function setHelp(open) {
@@ -427,7 +469,7 @@ Promise.race([fontsLoaded, new Promise(r => setTimeout(r, 1500))]).then(() => {
   widthCache.clear();
   loadEditor();
   if (boxesOverlap()) autoLayout(); // saved positions from different box sizes
-  fit();
+  if (docView) { Object.assign(view, docView); applyView(); } else fit();
 });
 // fonts that arrive late: measure again, and tidy up if the wider boxes now collide
 fontsLoaded.then(() => {

@@ -36,14 +36,13 @@
     </button>
   </div>
   <select id="examples" class="select" title="Load an example">
-    <option value="" selected disabled>Load example…</option>
+    <option value="" selected disabled>Open example…</option>
     <option value="school">Skoldatabasen</option>
     <option value="tour">Syntax tour</option>
     <option value="dogs">Hundutställningen</option>
     <option value="housing">Hyresvärdarna</option>
     <option value="projects">Projektdatabasen</option>
     <option value="store">Klädaffären</option>
-    <option value="empty">Empty</option>
   </select>
   <div class="menu-wrap">
     <button id="exportBtn" class="btn-primary" aria-haspopup="menu" aria-expanded="false">
@@ -67,6 +66,19 @@
     <svg width="16" height="16" class="moon" aria-hidden="true"><path d="M13.6 9.6A6 6 0 0 1 6.4 2.4a6 6 0 1 0 7.2 7.2z"/></svg>
   </button>
 </header>
+
+<nav class="tabbar" aria-label="Diagrams">
+  <button id="tabsLeft" class="icon-btn tab-scroll" title="Scroll tabs left" aria-label="Scroll tabs left" hidden>
+    <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M8.5 3 4.5 7l4 4"/></svg>
+  </button>
+  <div id="tabs" class="tabs" role="tablist"></div>
+  <button id="tabsRight" class="icon-btn tab-scroll" title="Scroll tabs right" aria-label="Scroll tabs right" hidden>
+    <svg width="14" height="14" class="ico" aria-hidden="true"><path d="m5.5 3 4 4-4 4"/></svg>
+  </button>
+  <button id="newTabBtn" class="icon-btn sm" title="New diagram" aria-label="New diagram">
+    <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M7 2v10M2 7h10"/></svg>
+  </button>
+</nav>
 
 <main>
   <section id="left">
@@ -105,6 +117,10 @@
         </div>
       </div>
       <button id="helpBtn" class="help-btn" title="Syntax reference" aria-pressed="false"><span class="q">?</span>Syntax</button>
+    </div>
+
+    <div class="docname">
+      <input id="docName" placeholder="Untitled" spellcheck="false" autocomplete="off" aria-label="Diagram name" maxlength="80">
     </div>
 
     <div class="editor">
@@ -234,6 +250,12 @@
       </button>
     </div>
 
+    <div id="storageNotice" class="notice" role="status" hidden>
+      <svg width="16" height="16" class="ico thin" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v4M8 4.9v.1"/></svg>
+      <span>Diagrams are saved only in this browser, not on your disk. Clearing browser data or using another browser or computer means they are gone. Use <b>Export</b> to keep a copy.</span>
+      <button id="noticeOk" class="btn-outline">OK, understood</button>
+    </div>
+
     <div id="toast" hidden><span id="toastMsg"></span><button id="toastAct"></button></div>
   </section>
 </main>
@@ -258,6 +280,18 @@
 </div>
 <datalist id="typeList"></datalist>
 
+<div id="confirmDlg" class="dlg-backdrop" hidden>
+  <div class="dlg confirm" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle" aria-describedby="cfBody">
+    <h2 id="cfTitle"></h2>
+    <p id="cfBody"></p>
+    <div class="dlg-actions">
+      <span class="spacer"></span>
+      <button id="cfOk" class="btn-outline danger"></button>
+      <button id="cfCancel" class="btn-primary"></button>
+    </div>
+  </div>
+</div>
+
 <script src="js/examples.js"></script>
 <script src="js/model.js"></script>
 <script src="js/sql.js"></script>
@@ -266,6 +300,7 @@
 <script src="js/colorSchemes.js"></script>
 <script src="js/app.js"></script>
 <script src="js/history.js"></script>
+<script src="js/docs.js"></script>
 <script src="js/tableEditor.js"></script>
 </body>
 </html>

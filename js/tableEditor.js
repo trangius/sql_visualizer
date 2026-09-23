@@ -384,7 +384,7 @@ function saveTable() {
     if (dlg.at) pos[name] = { ...dlg.at };
     else delete pos[name];
   }
-  store.set('pos', pos);
+  saveDoc();
   closeTableEditor();
   commitText(lines.join('\n'), at);
   histCommit();
@@ -405,7 +405,7 @@ function deleteTable() {
     lines.splice(s, e - s + 1);
     while (s < lines.length && !lines[s].trim() && (s === 0 || !lines[s - 1].trim())) lines.splice(s, 1);
     delete pos[t.name];
-    store.set('pos', pos);
+    saveDoc();
     closeTableEditor();
     commitText(lines.join('\n'), null);
     histCommit();

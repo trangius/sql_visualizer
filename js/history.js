@@ -134,7 +134,7 @@ function refreshAfterHistory(e, dir) {
     ta.setSelectionRange(end, end);
   }
   syncScroll();
-  store.set('pos', pos);
+  saveDoc();
   saveState();
 }
 

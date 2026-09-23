@@ -226,6 +226,36 @@ body.panel-collapsed #left, body.panel-collapsed #split { display: none; }
   :root:not([data-theme="light"]) #themeBtn .moon { display: none; }
 }
 
+/* ─── Tabs ─────────────────────────────────────────────────────────────────── */
+.tabbar {
+  height: 38px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 10px;
+  border-bottom: 1px solid var(--line); background: var(--bg);
+}
+.tabs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 4px 0 11px; flex: none;
+  border-radius: 7px; color: var(--muted); font-size: 12.5px; font-weight: 500; cursor: pointer;
+  max-width: 220px; outline: none; border: 1px solid transparent;
+}
+.tab:hover { background: var(--hover); color: var(--fg); }
+.tab.on { background: var(--panel); color: var(--fg); border-color: var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.tab:focus-visible { border-color: var(--accent); }
+.tab-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-close {
+  width: 20px; height: 20px; display: grid; place-items: center; flex: none; padding: 0;
+  border: 0; border-radius: 5px; background: transparent; color: var(--faint); opacity: 0;
+}
+.tab:hover .tab-close, .tab.on .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--line); color: var(--fg); }
+.tab-scroll { width: 26px; height: 26px; border-radius: 6px; flex: none; }
+.tab-scroll:disabled { opacity: .3; }
+
+.tab-rename {
+  width: 150px; height: 22px; padding: 0 6px; border: 1px solid var(--accent); border-radius: 5px;
+  background: var(--box-bg); color: var(--fg); font: 500 12.5px var(--font); outline: none;
+}
+
 /* ─── Layout ──────────────────────────────────────────────────────────────── */
 main { flex: 1; display: flex; min-height: 0; }
 #left {
@@ -256,6 +286,16 @@ main { flex: 1; display: flex; min-height: 0; }
   width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid currentColor;
   display: grid; place-items: center; font-size: 10px; font-weight: 600; line-height: 1;
 }
+
+/* the diagram's name, above its text */
+.docname { flex: none; padding: 10px 12px 6px 18px; }
+#docName {
+  width: 100%; height: 30px; padding: 0 8px; margin-left: -8px; border: 1px solid transparent; border-radius: 7px;
+  background: transparent; color: var(--fg); font: 600 14.5px var(--font); letter-spacing: -.01em; outline: none;
+}
+#docName:hover { border-color: var(--line); }
+#docName:focus { border-color: var(--accent); background: var(--box-bg); }
+#docName::placeholder { color: var(--faint); }
 
 /* a transparent textarea over a highlighted <pre> */
 .editor { flex: 1; display: flex; min-height: 0; position: relative; }
@@ -393,6 +433,22 @@ main { flex: 1; display: flex; min-height: 0; }
   height: 26px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent;
   color: var(--accent); font-weight: 600;
 }
+
+/* "only saved in this browser", bottom-left of the canvas until dismissed */
+.notice {
+  position: absolute; left: 12px; bottom: 12px; z-index: 7; max-width: min(520px, calc(100% - 300px));
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
+  font-size: 12.5px; line-height: 1.45; color: var(--muted);
+}
+.notice .ico { color: var(--warn); }
+.notice b { color: var(--fg); font-weight: 600; }
+.notice .btn-outline { flex: none; height: 30px; }
+
+/* small confirmation dialog */
+.dlg.confirm { width: 440px; }
+.dlg.confirm p { margin: 0 0 18px; color: var(--muted); line-height: 1.55; }
+.dlg.confirm b { color: var(--fg); font-weight: 600; }
 
 /* ─── Table dialog ────────────────────────────────────────────────────────── */
 .dlg-backdrop {
