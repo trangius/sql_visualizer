@@ -3,6 +3,32 @@
 // ─── Examples ────────────────────────────────────────────────────────────────
 
 const EXAMPLES = {
+  school: `# Skoldatabasen (schooldb)
+Student
+  Id
+  Name vc(100)
+  Email vc(100)
+  DateOfBirth date
+
+Teacher
+  Id
+  Name vc(100)
+  Email vc(100)
+
+Course
+  Id
+  Name vc(100)
+  Credits int
+  TeacherId -> Teacher
+
+# Enrollment: the junction table between Student and Course
+Enrollment
+  Id
+  StudentId -> Student
+  CourseId -> Course
+  EnrollmentDate date
+  Grade int  # 0 = IG, 1 = G, 2 = VG
+`,
   tour: `# Tables: a name without indentation
 # Columns: indented, "Name type flags -> Table"
 # No type means vc (varchar(128)). Id is int and the primary key.

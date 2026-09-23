@@ -116,7 +116,7 @@ problemsEl.addEventListener('click', e => {
 // ─── State ───────────────────────────────────────────────────────────────────
 
 const state = Object.assign({
-  mode: 'text', text: EXAMPLES.tour, sql: '', textStale: false, sqlStale: true, style: 'classic', leftW: null,
+  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', leftW: null,
 }, store.get('state', {}));
 let pos = store.get('pos', {});
 let model = { tables: [] };
