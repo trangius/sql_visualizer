@@ -22,6 +22,7 @@ function hlTextLine(line) {
 
 const SQL_KW = new Set(`CREATE TABLE PRIMARY KEY FOREIGN REFERENCES NOT NULL AUTO_INCREMENT UNIQUE DROP IF EXISTS SET
 ALTER ADD CONSTRAINT DEFAULT INDEX ON DELETE UPDATE CASCADE COLUMN ENGINE CHARSET COLLATE CHECK`.split(/\s+/));
+const SQL_TYPES = /^(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|BIT|BOOL|BOOLEAN|CHAR|VARCHAR|TEXT|TINYTEXT|MEDIUMTEXT|LONGTEXT|BLOB|DATE|DATETIME|TIMESTAMP|TIME|YEAR|ENUM|SET|JSON|UNSIGNED)$/i;
 function hlSqlLine(line) {
   let out = '', last = 0;
   const re = /(--.*$|#.*$)|('(?:[^'\\]|\\.|'')*'?)|(`[^`]*`?)|([\p{L}_][\p{L}\p{N}_$]*)/gu;
@@ -30,6 +31,7 @@ function hlSqlLine(line) {
     if (m[1]) out += `<span class="h-com">${esc(m[1])}</span>`;
     else if (m[2]) out += `<span class="h-str">${esc(m[2])}</span>`;
     else if (m[4] && SQL_KW.has(m[4].toUpperCase())) out += `<span class="h-kw">${esc(m[4])}</span>`;
+    else if (m[4] && SQL_TYPES.test(m[4])) out += `<span class="h-type">${esc(m[4])}</span>`;
     else out += esc(m[0]);
     last = m.index + m[0].length;
   }
@@ -131,7 +133,7 @@ ta.addEventListener('input', () => {
 // ─── State ───────────────────────────────────────────────────────────────────
 
 const state = Object.assign({
-  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', leftW: null,
+  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', colors: 'bleak', leftW: null,
 }, store.get('state', {}));
 let pos = store.get('pos', {});
 let model = { tables: [] };
@@ -205,6 +207,7 @@ function applyTheme(theme) {
   if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
   else delete document.documentElement.dataset.theme;
   $('#themeBtn').title = isDark() ? 'Switch to light mode' : 'Switch to dark mode';
+  applyColorScheme(); // each text colour scheme has a light and a dark variant
 }
 applyTheme(store.get('theme', 'auto'));
 systemDark.addEventListener('change', () => applyTheme(store.get('theme', 'auto')));
@@ -254,17 +257,31 @@ function setHelp(open) {
 $('#helpBtn').onclick = () => setHelp($('#help').hidden);
 $('#helpClose').onclick = () => setHelp(false);
 
-// Export menu: Diagram (SVG, PNG) and Schema (.sql file, copy to clipboard)
+// Menus: Export (app bar) and Text colours (editor header)
+const MENUS = [['#exportBtn', '#exportMenu'], ['#schemeBtn', '#schemeMenu']];
 function closeMenus() {
-  $('#exportMenu').hidden = true;
-  $('#exportBtn').setAttribute('aria-expanded', 'false');
+  for (const [btn, menu] of MENUS) {
+    $(menu).hidden = true;
+    $(btn).setAttribute('aria-expanded', 'false');
+  }
 }
-$('#exportBtn').onclick = e => {
-  e.stopPropagation();
-  const open = $('#exportMenu').hidden;
-  $('#exportMenu').hidden = !open;
-  $('#exportBtn').setAttribute('aria-expanded', String(open));
-};
+for (const [btn, menu] of MENUS) {
+  $(btn).onclick = e => {
+    e.stopPropagation();
+    const open = $(menu).hidden;
+    closeMenus();
+    $(menu).hidden = !open;
+    $(btn).setAttribute('aria-expanded', String(open));
+  };
+}
+$('#schemeList').addEventListener('click', e => {
+  const b = e.target.closest('[data-scheme]');
+  if (!b) return;
+  state.colors = b.dataset.scheme;
+  applyColorScheme();
+  saveState();
+  closeMenus();
+});
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu-wrap')) closeMenus(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
 

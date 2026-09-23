@@ -197,6 +197,13 @@ button { cursor: pointer; }
 .menu button:hover, .menu button:focus-visible { background: var(--hover); outline: none; }
 .menu .ext { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .menu-sep { height: 1px; background: var(--line); margin: 4px; }
+.menu-left { right: auto; left: 0; width: 220px; }
+#schemeList { display: flex; flex-direction: column; gap: 1px; }
+#schemeList button { justify-content: flex-start; gap: 8px; width: 100%; }
+#schemeList .check { width: 12px; color: var(--accent); font-weight: 600; }
+#schemeList .scheme-name { flex: 1; }
+.swatches { display: flex; gap: 3px; }
+.swatches i { width: 10px; height: 10px; border-radius: 3px; }
 
 #themeBtn .moon { fill: currentColor; }
 #themeBtn .sun { display: none; }
