@@ -131,6 +131,15 @@ button { cursor: pointer; }
 .vsep.sm { height: 18px; margin: 0 2px; }
 [hidden] { display: none !important; }
 
+/* Scrollbars in the app's palette: thin, a thumb in the border colour, no track.
+   Chrome and Firefox use the standard properties; Safari uses the -webkit- ones. */
+* { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+*:hover { scrollbar-color: var(--faint) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--faint); }
+
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
 .icon-btn {
   width: 32px; height: 32px; display: grid; place-items: center; flex: none;
@@ -215,6 +224,11 @@ body.panel-collapsed #left, body.panel-collapsed #split { display: none; }
 .size-row .scheme-name { flex: 1; }
 .menu .size-row button { width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 6px; }
 .menu .size-row button:disabled { opacity: .35; cursor: default; background: transparent; }
+.menu .switch-row { width: 100%; justify-content: space-between; padding: 0 9px; }
+.switch { width: 30px; height: 18px; border-radius: 9px; background: var(--line2); position: relative; flex: none; transition: background .15s; }
+.switch i { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: left .15s; }
+.switch-row[aria-checked="true"] .switch { background: var(--accent); }
+.switch-row[aria-checked="true"] .switch i { left: 14px; }
 #sizeLabel { min-width: 44px; text-align: center; font: 12px var(--mono); color: var(--muted); }
 
 #themeBtn .moon { fill: currentColor; }
@@ -314,6 +328,10 @@ main { flex: 1; display: flex; min-height: 0; }
 /* the gutter and the highlight layer get room to scroll as far as the textarea can
    (its horizontal scrollbar adds to its scroll height), so lines never drift apart */
 .code pre { overflow: hidden; pointer-events: none; color: var(--fg); padding-bottom: 214px; }
+/* both layers keep the same room for a scrollbar, so wrapped lines break at the same place */
+.code pre, .code textarea { scrollbar-gutter: stable; }
+#hl > div { min-height: var(--code-lh); }
+.code.wrap pre, .code.wrap textarea { white-space: pre-wrap; overflow-wrap: anywhere; }
 .code textarea { background: transparent; color: transparent; caret-color: var(--fg); resize: none; outline: none; }
 .code textarea::selection { background: var(--sel); }
 .h-tbl { color: var(--tok-tbl); }

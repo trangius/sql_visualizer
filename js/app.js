@@ -46,20 +46,27 @@ function decorateEditor(problems) {
   }
   const lines = ta.value.split('\n');
   const hlLine = state.mode === 'text' ? hlTextLine : hlSqlLine;
+  // one block per line, so a wrapped line's real height can be measured
   hl.innerHTML = lines.map((l, i) => {
     const p = byLine.get(i + 1);
     const h = hlLine(l);
-    if (!p || !l.trim()) return h;
+    if (!p || !l.trim()) return `<div>${h || '<br>'}</div>`;
     const lead = l.match(/^\s*/)[0];
-    return lead + `<span class="h-${p.level}">${h.slice(lead.length)}</span>`;
-  }).join('\n') + '\n ';
-  gutter.innerHTML = lines.map((_, i) => {
-    const p = byLine.get(i + 1);
-    return p ? `<div class="${p.level}" title="${esc(p.msg)}">${i + 1}</div>` : `<div>${i + 1}</div>`;
+    return `<div>${lead}<span class="h-${p.level}">${h.slice(lead.length)}</span></div>`;
   }).join('');
+  // with word wrap, each line number is as tall as its (wrapped) line
+  const rows = state.wrap ? [...hl.children].map(d => d.offsetHeight) : null;
+  gutter.innerHTML = lines.map((_, i) => {
+    const p = byLine.get(i + 1), h = rows ? ` style="height:${rows[i]}px"` : '';
+    return p ? `<div class="${p.level}" title="${esc(p.msg)}"${h}>${i + 1}</div>` : `<div${h}>${i + 1}</div>`;
+  }).join('');
+  lastProblems = problems;
   updateStatus(problems);
   syncScroll();
 }
+
+let lastProblems = [];
+const redecorate = () => decorateEditor(lastProblems);
 
 // Status bar: the first problem (click to jump there), and the diagram's size
 let firstProblem = null;
@@ -110,7 +117,7 @@ function selectLine(n) {
   ta.focus();
   ta.setSelectionRange(start, start + lines[n - 1].length);
   const lh = lineHeight();
-  const top = (n - 1) * lh;
+  const top = state.wrap ? hl.children[n - 1].offsetTop - hl.children[0].offsetTop : (n - 1) * lh;
   if (top < ta.scrollTop || top > ta.scrollTop + ta.clientHeight - 3 * lh) ta.scrollTop = Math.max(0, top - 3 * lh);
   syncScroll();
 }
@@ -152,7 +159,7 @@ ta.addEventListener('input', () => {
 //   sqlviz.docs       the tabs: { list: [{ id, name }], active }
 //   sqlviz.doc.<id>   one diagram: text, SQL, mode, box positions and the view (pan/zoom)
 // `state` holds the preferences plus the active diagram's fields; `pos` its box positions.
-const SETTINGS = ['style', 'colors', 'fontSize', 'notation', 'panel', 'leftW'];
+const SETTINGS = ['style', 'colors', 'fontSize', 'wrap', 'notation', 'panel', 'leftW'];
 // base: the text the diagram was created with (an example, or empty), to tell whether it has changed
 const DOC_DEFAULTS = { text: '', sql: '', mode: 'text', textStale: false, sqlStale: true, base: null };
 const docKey = id => 'doc.' + id;
@@ -176,7 +183,7 @@ if (!docs?.list?.length) {
 if (!docs.list.some(d => d.id === docs.active)) docs.active = docs.list[0].id;
 
 const state = Object.assign({
-  style: 'classic', colors: 'bleak', fontSize: 13, notation: 'arrows', panel: 'mid', leftW: null, ...DOC_DEFAULTS,
+  style: 'classic', colors: 'bleak', fontSize: 13, wrap: true, notation: 'arrows', panel: 'mid', leftW: null, ...DOC_DEFAULTS,
 }, store.get('settings', {}));
 let pos = {};
 let docView = null; // the active diagram's saved pan/zoom, if any
@@ -379,12 +386,31 @@ function applyFontSize() {
   $('#sizeLabel').textContent = state.fontSize + 'px';
   $('#sizeDown').disabled = state.fontSize <= FONT_MIN;
   $('#sizeUp').disabled = state.fontSize >= FONT_MAX;
+  if (state.wrap) redecorate(); // wrapped lines change height
   syncScroll();
 }
+
+// Word wrap (on by default). The text box and the colouring layer wrap identically;
+// the line numbers follow the measured height of each line.
+function applyWrap() {
+  $('.code').classList.toggle('wrap', state.wrap);
+  ta.wrap = state.wrap ? 'soft' : 'off';
+  $('#wrapSwitch').setAttribute('aria-checked', String(state.wrap));
+  redecorate();
+}
+$('#wrapSwitch').onclick = e => { e.stopPropagation(); state.wrap = !state.wrap; applyWrap(); saveState(); };
+// re-measure wrapped lines when the editor's width changes (splitter, ½ screen, window)
+let wrapWidth = 0;
+new ResizeObserver(() => {
+  if (!state.wrap || ta.clientWidth === wrapWidth) return;
+  wrapWidth = ta.clientWidth;
+  redecorate();
+}).observe(ta);
 const stepFontSize = d => { state.fontSize += d; applyFontSize(); saveState(); };
 $('#sizeDown').onclick = e => { e.stopPropagation(); stepFontSize(-1); };
 $('#sizeUp').onclick = e => { e.stopPropagation(); stepFontSize(1); };
 applyFontSize();
+applyWrap();
 
 $('#schemeList').addEventListener('click', e => {
   const b = e.target.closest('[data-scheme]');
