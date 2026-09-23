@@ -197,7 +197,6 @@ body.panel-collapsed #left, body.panel-collapsed #split { display: none; }
 .logo i:nth-child(2) { width: 70%; opacity: .7; }
 .logo i:nth-child(3) { width: 85%; opacity: .7; }
 .title { font-weight: 600; font-size: 14.5px; letter-spacing: -.01em; white-space: nowrap; }
-.subtitle { color: var(--muted); font-size: 13px; white-space: nowrap; }
 
 .menu-wrap { position: relative; }
 .menu {
