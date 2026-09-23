@@ -490,6 +490,14 @@ function contentBounds(pad) {
   const x1 = Math.max(...bs.map(b => b.x + b.w)) + pad, y1 = Math.max(...bs.map(b => b.y + b.h)) + pad;
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
+// Is the whole diagram on screen (clear of the floating toolbars)?
+function diagramVisible() {
+  const bb = contentBounds(0), r = svg.getBoundingClientRect();
+  if (!bb || !r.width) return false;
+  const x0 = bb.x * view.s + view.tx, y0 = bb.y * view.s + view.ty;
+  return x0 >= 0 && y0 >= CARD_TOP - 20 && x0 + bb.w * view.s <= r.width && y0 + bb.h * view.s <= r.height - CARD_BOTTOM + 20;
+}
+
 function fit() {
   const r = svg.getBoundingClientRect();
   const bb = contentBounds(20);

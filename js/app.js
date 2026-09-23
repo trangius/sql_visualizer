@@ -133,7 +133,7 @@ ta.addEventListener('input', () => {
 // ─── State ───────────────────────────────────────────────────────────────────
 
 const state = Object.assign({
-  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', colors: 'bleak', leftW: null,
+  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', colors: 'bleak', panel: 'mid', leftW: null,
 }, store.get('state', {}));
 let pos = store.get('pos', {});
 let model = { tables: [] };
@@ -313,15 +313,44 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') { e.preventDefault(); copySql(); }
 });
 
-// Splitter between editor and canvas (editor ≥ 300px, canvas ≥ 380px)
+// Editor width: collapsed, mid (420px or the width last dragged to) or half the screen.
+// Splitter between editor and canvas (editor ≥ 300px, canvas ≥ 380px).
 const left = $('#left'), split = $('#split');
 const clampLeft = w => Math.max(300, Math.min(window.innerWidth - 380, w));
-if (state.leftW) left.style.width = clampLeft(state.leftW) + 'px';
+
+function applyPanel(keepView = true) {
+  if (!['collapsed', 'mid', 'half'].includes(state.panel)) state.panel = 'mid';
+  const before = svg.getBoundingClientRect().width, wasVisible = diagramVisible();
+  document.body.classList.toggle('panel-collapsed', state.panel === 'collapsed');
+  if (state.panel !== 'collapsed') {
+    left.style.width = clampLeft(state.panel === 'half' ? window.innerWidth / 2 : state.leftW || 420) + 'px';
+  }
+  document.querySelectorAll('#panelSeg button').forEach(b => b.classList.toggle('on', b.dataset.panel === state.panel));
+  // keep what was in the middle of the canvas in the middle; if the whole diagram
+  // was on screen and no longer fits, fit it again
+  const after = svg.getBoundingClientRect().width;
+  if (keepView && after !== before) {
+    view.tx += (after - before) / 2;
+    applyView();
+    if (wasVisible && !diagramVisible()) fit();
+  }
+}
+$('#panelSeg').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  state.panel = b.dataset.panel;
+  applyPanel();
+  saveState();
+});
+window.addEventListener('resize', () => { if (state.panel === 'half') applyPanel(); });
+applyPanel(false);
+
 split.addEventListener('pointerdown', e => {
   split.setPointerCapture(e.pointerId);
   split.classList.add('active');
   const move = ev => {
     state.leftW = clampLeft(ev.clientX);
+    if (state.panel !== 'mid') { state.panel = 'mid'; applyPanel(false); } // dragging makes it a custom "mid" width
     left.style.width = state.leftW + 'px';
   };
   const up = () => {

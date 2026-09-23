@@ -24,6 +24,17 @@
     <div class="subtitle">arrow diagrams</div>
   </div>
   <div class="spacer"></div>
+  <div class="seg icon-seg" id="panelSeg" role="group" aria-label="Editor width">
+    <button data-panel="collapsed" title="Hide the editor" aria-label="Hide the editor">
+      <svg width="16" height="16" class="ico thin" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/></svg>
+    </button>
+    <button data-panel="mid" title="Editor beside the diagram" aria-label="Editor beside the diagram">
+      <svg width="16" height="16" class="ico thin" aria-hidden="true"><rect class="fill" x="2" y="3" width="3.5" height="10" rx="1"/><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M5.5 2.5v11"/></svg>
+    </button>
+    <button data-panel="half" title="Editor at half the screen" aria-label="Editor at half the screen">
+      <svg width="16" height="16" class="ico thin" aria-hidden="true"><rect class="fill" x="2" y="3" width="6" height="10" rx="1"/><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M8 2.5v11"/></svg>
+    </button>
+  </div>
   <select id="examples" class="select" title="Load an example">
     <option value="" selected disabled>Load example…</option>
     <option value="school">Skoldatabasen</option>
