@@ -94,7 +94,7 @@ function selectLine(n) {
   for (let i = 0; i < n - 1; i++) start += lines[i].length + 1;
   ta.focus();
   ta.setSelectionRange(start, start + lines[n - 1].length);
-  const lh = 20;
+  const lh = lineHeight();
   const top = (n - 1) * lh;
   if (top < ta.scrollTop || top > ta.scrollTop + ta.clientHeight - 3 * lh) ta.scrollTop = Math.max(0, top - 3 * lh);
   syncScroll();
@@ -133,7 +133,7 @@ ta.addEventListener('input', () => {
 // ─── State ───────────────────────────────────────────────────────────────────
 
 const state = Object.assign({
-  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', colors: 'bleak', panel: 'mid', leftW: null,
+  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', colors: 'bleak', fontSize: 13, panel: 'mid', leftW: null,
 }, store.get('state', {}));
 let pos = store.get('pos', {});
 let model = { tables: [] };
@@ -274,6 +274,23 @@ for (const [btn, menu] of MENUS) {
     $(btn).setAttribute('aria-expanded', String(open));
   };
 }
+// Editor text size (the Text menu stays open while stepping, so you see the change)
+const FONT_MIN = 10, FONT_MAX = 24;
+const lineHeight = () => Math.round(state.fontSize * 1.54); // 13px → 20px, as in the design
+function applyFontSize() {
+  state.fontSize = Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(+state.fontSize || 13)));
+  document.documentElement.style.setProperty('--code-size', state.fontSize + 'px');
+  document.documentElement.style.setProperty('--code-lh', lineHeight() + 'px');
+  $('#sizeLabel').textContent = state.fontSize + 'px';
+  $('#sizeDown').disabled = state.fontSize <= FONT_MIN;
+  $('#sizeUp').disabled = state.fontSize >= FONT_MAX;
+  syncScroll();
+}
+const stepFontSize = d => { state.fontSize += d; applyFontSize(); saveState(); };
+$('#sizeDown').onclick = e => { e.stopPropagation(); stepFontSize(-1); };
+$('#sizeUp').onclick = e => { e.stopPropagation(); stepFontSize(1); };
+applyFontSize();
+
 $('#schemeList').addEventListener('click', e => {
   const b = e.target.closest('[data-scheme]');
   if (!b) return;

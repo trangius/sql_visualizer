@@ -37,6 +37,8 @@
 
   --font: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --code-size: 13px; /* editor text size, set from the Text menu */
+  --code-lh: 20px;
 }
 /* Dark: follow the system unless the user picked light, or when the user picked dark */
 @media (prefers-color-scheme: dark) {
@@ -209,6 +211,11 @@ body.panel-collapsed #left, body.panel-collapsed #split { display: none; }
 #schemeList .scheme-name { flex: 1; }
 .swatches { display: flex; gap: 3px; }
 .swatches i { width: 10px; height: 10px; border-radius: 3px; }
+.size-row { display: flex; align-items: center; gap: 4px; padding: 2px 5px 4px 9px; }
+.size-row .scheme-name { flex: 1; }
+.menu .size-row button { width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 6px; }
+.menu .size-row button:disabled { opacity: .35; cursor: default; background: transparent; }
+#sizeLabel { min-width: 44px; text-align: center; font: 12px var(--mono); color: var(--muted); }
 
 #themeBtn .moon { fill: currentColor; }
 #themeBtn .sun { display: none; }
@@ -253,18 +260,20 @@ main { flex: 1; display: flex; min-height: 0; }
 /* a transparent textarea over a highlighted <pre> */
 .editor { flex: 1; display: flex; min-height: 0; position: relative; }
 .gutter {
-  width: 46px; flex: none; overflow: hidden; padding: 14px 0; text-align: right;
-  font: 12px/20px var(--mono); color: var(--faint); user-select: none; background: var(--panel);
+  width: 46px; flex: none; overflow: hidden; padding: 14px 0 214px; text-align: right;
+  font: calc(var(--code-size) - 1px)/var(--code-lh) var(--mono); color: var(--faint); user-select: none; background: var(--panel);
 }
-.gutter div { height: 20px; padding-right: 12px; }
+.gutter div { height: var(--code-lh); padding-right: 12px; }
 .gutter div.error { color: var(--err); font-weight: 600; }
 .gutter div.warn { color: var(--warn); font-weight: 600; }
 .code { flex: 1; position: relative; min-width: 0; }
 .code pre, .code textarea {
   position: absolute; inset: 0; margin: 0; padding: 14px 16px 14px 6px;
-  font: 13px/20px var(--mono); white-space: pre; tab-size: 2; border: 0; overflow: auto;
+  font: var(--code-size)/var(--code-lh) var(--mono); white-space: pre; tab-size: 2; border: 0; overflow: auto;
 }
-.code pre { overflow: hidden; pointer-events: none; color: var(--fg); }
+/* the gutter and the highlight layer get room to scroll as far as the textarea can
+   (its horizontal scrollbar adds to its scroll height), so lines never drift apart */
+.code pre { overflow: hidden; pointer-events: none; color: var(--fg); padding-bottom: 214px; }
 .code textarea { background: transparent; color: transparent; caret-color: var(--fg); resize: none; outline: none; }
 .code textarea::selection { background: var(--sel); }
 .h-tbl { color: var(--tok-tbl); }

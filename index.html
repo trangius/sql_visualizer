@@ -84,11 +84,23 @@
       </button>
       <div class="vsep sm"></div>
       <div class="menu-wrap">
-        <button id="schemeBtn" class="icon-btn sm" title="Text colours" aria-label="Text colours" aria-haspopup="menu" aria-expanded="false">
+        <button id="schemeBtn" class="icon-btn sm" title="Text size and colours" aria-label="Text size and colours" aria-haspopup="menu" aria-expanded="false">
           <svg width="16" height="16" class="ico thin" aria-hidden="true"><path d="M8 1.8a6.2 6.2 0 1 0 0 12.4c1 0 1.5-.6 1.5-1.3 0-.9-.8-1.2-.8-2 0-.7.6-1.2 1.3-1.2h1.6a2.6 2.6 0 0 0 2.6-2.6C14.2 4.1 11.4 1.8 8 1.8z"/><circle cx="4.9" cy="7.2" r=".9"/><circle cx="7.1" cy="4.6" r=".9"/><circle cx="10.4" cy="5.1" r=".9"/></svg>
         </button>
         <div id="schemeMenu" class="menu menu-left" role="menu" hidden>
-          <div class="menu-label">Text colours</div>
+          <div class="menu-label">Text size</div>
+          <div class="size-row">
+            <span class="scheme-name">Editor</span>
+            <button id="sizeDown" title="Smaller text" aria-label="Smaller text">
+              <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M2.5 7h9"/></svg>
+            </button>
+            <span id="sizeLabel">13px</span>
+            <button id="sizeUp" title="Larger text" aria-label="Larger text">
+              <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M7 2.5v9M2.5 7h9"/></svg>
+            </button>
+          </div>
+          <div class="menu-sep"></div>
+          <div class="menu-label">Colours</div>
           <div id="schemeList"></div>
         </div>
       </div>
