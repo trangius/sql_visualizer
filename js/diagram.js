@@ -563,12 +563,20 @@ $('#zoomIn').onclick = () => zoomTo(view.s * 1.2, ...viewMiddle());
 $('#zoomOut').onclick = () => zoomTo(view.s / 1.2, ...viewMiddle());
 $('#zoomLabel').onclick = () => zoomTo(1, ...viewMiddle());
 $('#fitBtn').onclick = fit;
-$('#layoutBtn').onclick = () => {
+// Rearrange every table (the Auto layout button, loading an example, repairing overlaps)
+function autoLayout() {
   histRecord('layout', () => arrangeAll(model.tables, geometry.dims));
   store.set('pos', pos);
   drawDiagram();
-  fit();
-};
+}
+$('#layoutBtn').onclick = () => { autoLayout(); fit(); };
+
+// Do any two boxes overlap? (e.g. positions saved while boxes had other sizes)
+function boxesOverlap() {
+  const bs = [...geometry.boxes.values()];
+  return bs.some((p, i) => bs.slice(i + 1).some(q =>
+    p.x < q.x + q.w && p.x + p.w > q.x && p.y < q.y + q.h && p.y + p.h > q.y));
+}
 
 // ─── Diagram style ───────────────────────────────────────────────────────────
 

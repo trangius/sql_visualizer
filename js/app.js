@@ -237,10 +237,8 @@ $('#examples').addEventListener('change', e => {
     state.textStale = false;
     state.sqlStale = true;
     state.mode = 'text';
-    // lay the example out fresh
-    const r = parseText(state.text);
-    for (const t of r.tables) delete pos[t.name];
     loadEditor();
+    autoLayout(); // an example always gets a fresh auto layout
   });
   setHelp(false);
   fit();
@@ -327,7 +325,13 @@ const fontsLoaded = Promise.all(Object.values(FONTS).map(f => document.fonts.loa
 Promise.race([fontsLoaded, new Promise(r => setTimeout(r, 1500))]).then(() => {
   widthCache.clear();
   loadEditor();
+  if (boxesOverlap()) autoLayout(); // saved positions from different box sizes
   fit();
 });
-// fonts that arrive late: measure again
-fontsLoaded.then(() => { widthCache.clear(); if (model.tables) drawDiagram(); });
+// fonts that arrive late: measure again, and tidy up if the wider boxes now collide
+fontsLoaded.then(() => {
+  widthCache.clear();
+  if (!model.tables) return;
+  drawDiagram();
+  if (boxesOverlap()) { autoLayout(); fit(); }
+});
