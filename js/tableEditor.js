@@ -22,12 +22,7 @@ const pointsToPk = c => c.target.pkCols.length === 1 && c.target.pkCols[0] === c
 
 // The model of the text syntax, converting from SQL first if the SQL was edited last
 function textModel() {
-  if (state.textStale) {
-    const r = parseSQL(state.sql);
-    resolve(r.tables);
-    state.text = genText(r.tables, r.problems);
-    state.textStale = false;
-  }
+  regenerate('text');
   const r = parseText(state.text);
   resolve(r.tables);
   return r;
@@ -361,6 +356,7 @@ function saveTable() {
     block.push('  ' + parts.join(' ') + (c.comment ? '  ' + c.comment : ''));
   }
 
+  histBegin(dlg.orig ? 'edit table' : 'new table');
   const lines = state.text.split('\n');
   let at;
   const t = dlg.orig && tables.find(t => t.name === dlg.orig);
@@ -391,6 +387,7 @@ function saveTable() {
   store.set('pos', pos);
   closeTableEditor();
   commitText(lines.join('\n'), at);
+  histCommit();
 }
 
 function deleteTable() {
@@ -402,6 +399,7 @@ function deleteTable() {
   }
   const t = textModel().tables.find(t => t.name === dlg.orig);
   if (t) {
+    histBegin('delete table');
     const lines = state.text.split('\n');
     const [s, e] = blockRange(lines, t.line - 1);
     lines.splice(s, e - s + 1);
@@ -410,7 +408,8 @@ function deleteTable() {
     store.set('pos', pos);
     closeTableEditor();
     commitText(lines.join('\n'), null);
-    toast(`Deleted ${t.name}`, 'Undo', undoLast);
+    histCommit();
+    toast(`Deleted ${t.name}`, 'Undo', histUndo);
   } else {
     closeTableEditor();
   }
@@ -421,24 +420,19 @@ function disarmDelete() {
   btn.textContent = 'Delete table';
 }
 
-let undoText = null;
-function undoLast() {
-  if (undoText != null) commitText(undoText, null);
-}
-
-// Write new text into the editor. In text mode this goes through the textarea's own
-// editing so ⌘Z works; in SQL mode the SQL is regenerated from the new text.
+// Write new text into the editor (in SQL mode the SQL is regenerated from it).
+// Undo is handled by the app's history, which records the caller's action.
 function commitText(text, line) {
-  undoText = state.text;
+  state.text = text;
+  state.sqlStale = true;
   if (state.mode === 'text') {
     const top = ta.scrollTop;
-    ta.focus();
-    ta.select();
-    insertText(text); // fires "input", which updates state and diagram
+    ta.value = text;
+    update();
     ta.scrollTop = top;
     if (line) selectLine(line); else syncScroll();
+    saveState();
   } else {
-    state.text = text;
     const r = parseText(text);
     resolve(r.tables);
     state.sql = genSQL(r.tables);

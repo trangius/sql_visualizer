@@ -469,6 +469,7 @@ svg.addEventListener('pointermove', e => {
     return;
   }
   if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+  if (!drag.moved) histBegin('move');
   drag.moved = true;
   const w = toWorld(e);
   pos[drag.name] = { x: Math.round((w.x - drag.dx) / 10) * 10, y: Math.round((w.y - drag.dy) / 10) * 10 };
@@ -477,7 +478,7 @@ svg.addEventListener('pointermove', e => {
 function endDrag() {
   if (!drag) return;
   if (drag.kind === 'box') {
-    if (drag.moved) store.set('pos', pos);
+    if (drag.moved) { store.set('pos', pos); histCommit(); }
     else if (drag.line) selectLine(+drag.line);
     else {
       const t = model.tables.find(t => t.name === drag.name);
@@ -506,7 +507,7 @@ $('#zoomIn').onclick = () => zoomCenter(1.2);
 $('#zoomOut').onclick = () => zoomCenter(1 / 1.2);
 $('#fitBtn').onclick = fit;
 $('#layoutBtn').onclick = () => {
-  arrangeAll(model.tables, geometry.dims);
+  histRecord('layout', () => arrangeAll(model.tables, geometry.dims));
   store.set('pos', pos);
   drawDiagram();
   fit();

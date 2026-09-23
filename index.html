@@ -39,6 +39,12 @@
         <button data-mode="sql">SQL</button>
       </div>
       <div class="spacer"></div>
+      <button id="undoBtn" class="icon-btn" title="Undo (⌘Z)" aria-label="Undo" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button>
+      <button id="redoBtn" class="icon-btn" title="Redo (⇧⌘Z)" aria-label="Redo" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+      </button>
       <button id="newTableBtn" title="Create a table (or double-click the canvas)">+ Table</button>
       <button id="helpBtn">Syntax</button>
     </div>
@@ -130,6 +136,7 @@ DogToShow             ← no Id = no primary key…
 <script src="js/diagram.js"></script>
 <script src="js/layout.js"></script>
 <script src="js/app.js"></script>
+<script src="js/history.js"></script>
 <script src="js/tableEditor.js"></script>
 </body>
 </html>

@@ -102,6 +102,7 @@ ta.addEventListener('keydown', e => {
 });
 ta.addEventListener('scroll', syncScroll);
 ta.addEventListener('input', () => {
+  histTyping();
   if (state.mode === 'text') { state.text = ta.value; state.sqlStale = true; }
   else { state.sql = ta.value; state.textStale = true; }
   update();
@@ -140,22 +141,32 @@ function update() {
   drawDiagram();
 }
 
-function setMode(mode) {
-  if (mode === state.mode) return;
-  if (mode === 'sql' && state.sqlStale) {
+// Bring the text (or SQL) up to date after the other side was edited.
+// Recorded as a silent history entry: later edits are stored as offsets into the new text.
+function regenerate(which) {
+  if (which === 'sql' ? !state.sqlStale : !state.textStale) return;
+  histBegin('regenerate', { silent: true });
+  if (which === 'sql') {
     const r = parseText(state.text);
     resolve(r.tables);
     state.sql = genSQL(r.tables);
     state.sqlStale = false;
-  }
-  if (mode === 'text' && state.textStale) {
+  } else {
     const r = parseSQL(state.sql);
     resolve(r.tables);
     state.text = genText(r.tables, r.problems);
     state.textStale = false;
   }
+  histCommit();
+}
+
+function setMode(mode) {
+  if (mode === state.mode) return;
+  histBegin('mode', { silent: true });
+  regenerate(mode);
   state.mode = mode;
   loadEditor();
+  histCommit();
   saveState();
 }
 
@@ -206,26 +217,19 @@ function toast(msg, actLabel, act) {
 $('#examples').addEventListener('change', e => {
   const key = e.target.value;
   e.target.selectedIndex = 0;
-  const backup = { ...state, pos: { ...pos } };
-  state.text = EXAMPLES[key];
-  state.textStale = false;
-  state.sqlStale = true;
-  state.mode = 'text';
-  // lay the example out fresh
-  const r = parseText(state.text);
-  for (const t of r.tables) delete pos[t.name];
-  loadEditor();
+  histRecord('example', () => {
+    state.text = EXAMPLES[key];
+    state.textStale = false;
+    state.sqlStale = true;
+    state.mode = 'text';
+    // lay the example out fresh
+    const r = parseText(state.text);
+    for (const t of r.tables) delete pos[t.name];
+    loadEditor();
+  });
   fit();
   saveState();
-  toast('Example loaded', 'Undo', () => {
-    const { pos: oldPos, ...oldState } = backup;
-    Object.assign(state, oldState);
-    pos = oldPos;
-    store.set('pos', pos);
-    loadEditor();
-    fit();
-    saveState();
-  });
+  toast('Example loaded', 'Undo', () => { histUndo(); fit(); });
 });
 
 $('#helpBtn').onclick = () => { $('#help').hidden = !$('#help').hidden; };
