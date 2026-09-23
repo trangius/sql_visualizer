@@ -39,6 +39,7 @@
         <button data-mode="sql">SQL</button>
       </div>
       <div class="spacer"></div>
+      <button id="newTableBtn" title="Create a table (or double-click the canvas)">+ Table</button>
       <button id="helpBtn">Syntax</button>
     </div>
     <div class="editor">
@@ -61,7 +62,8 @@ Dog
   Id
   Name vc(64)
   Points decimal(3,1) null
-  OwnerId -> Owner    ← arrow to Owner.Id (type int)
+  OwnerId -> Owner    ← arrow to Owner's primary key (Id)
+  OwnerMail -> Owner.Email  ← arrow to a specific column
 
 DogToShow             ← no Id = no primary key…
   DogId pk -> Dog     ← …unless you write pk
@@ -70,10 +72,12 @@ DogToShow             ← no Id = no primary key…
         <tr><td><code>pk</code></td><td>primary key. An explicit <code>pk</code> wins over <code>Id</code>.</td></tr>
         <tr><td><code>null</code></td><td>column may be NULL (default is NOT NULL)</td></tr>
         <tr><td><code>unique</code></td><td>UNIQUE constraint (this is how 1-1 is made)</td></tr>
-        <tr><td><code>-&gt; Table</code></td><td>foreign key to <code>Table.Id</code>. The target must have an Id column.</td></tr>
+        <tr><td><code>-&gt; Table</code></td><td>foreign key to the table's primary key (normally <code>Id</code>). The FK column gets its type.</td></tr>
+        <tr><td><code>-&gt; Table.Col</code></td><td>foreign key to a specific column. It should be the primary key or <code>unique</code>.</td></tr>
         <tr><td><code>vc</code></td><td>varchar(128). Any other type is written as-is: <code>int</code>, <code>text</code>, <code>date</code>, <code>datetime</code>, <code>decimal(8,2)</code>…</td></tr>
       </table>
       <p>Drag boxes to move them. Drag the background to pan, and ⌘/Ctrl + scroll (or pinch) to zoom. Click a row to jump to its line. Hover a row to see its arrows.</p>
+      <p><b>+ Table</b> or double-clicking the canvas creates a table. Double-click a box to edit it. Changes are written into the text.</p>
       <p>Switch to <b>SQL</b> to see and edit the generated MariaDB code. Edits there are converted back to text.</p>
       <button id="helpClose">Close</button>
     </div>
@@ -99,6 +103,25 @@ DogToShow             ← no Id = no primary key…
     </div>
   </section>
 </main>
+<div id="tableDlg" class="dlg-backdrop" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="tdTitle">
+    <h2 id="tdTitle">New table</h2>
+    <label class="field">Table name <input id="tdName" spellcheck="false" autocomplete="off"></label>
+    <div class="col-grid col-head">
+      <span>Column</span><span>Type</span><span title="Primary key">PK</span><span title="May be NULL">Null</span><span>Unique</span><span>Foreign key</span><span></span>
+    </div>
+    <div id="tdCols"></div>
+    <button id="tdAdd">+ Add column</button>
+    <div id="tdError" class="dlg-error"></div>
+    <div class="dlg-actions">
+      <button id="tdDelete" class="danger">Delete table</button>
+      <span class="spacer"></span>
+      <button id="tdCancel">Cancel</button>
+      <button id="tdSave" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+<datalist id="typeList"></datalist>
 <div id="toast" hidden><span id="toastMsg"></span><button id="toastAct"></button></div>
 
 <script src="js/examples.js"></script>
@@ -106,5 +129,6 @@ DogToShow             ← no Id = no primary key…
 <script src="js/sql.js"></script>
 <script src="js/diagram.js"></script>
 <script src="js/app.js"></script>
+<script src="js/tableEditor.js"></script>
 </body>
 </html>

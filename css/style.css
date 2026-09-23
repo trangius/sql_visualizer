@@ -219,4 +219,78 @@ main { flex: 1; display: flex; min-height: 0; }
   :root:not([data-theme="light"]) #themeBtn .sun { display: block; }
   :root:not([data-theme="light"]) #themeBtn .moon { display: none; }
 }
+/* Table dialog */
+.dlg-backdrop {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 30;
+  display: grid; place-items: center; padding: 16px;
+}
+.dlg {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .25); padding: 18px 20px;
+  width: 780px; max-width: 100%; max-height: calc(100vh - 32px); overflow: auto;
+}
+.dlg h2 { font-size: 16px; margin: 0 0 14px; }
+.dlg input[type=text], .dlg input:not([type]) {
+  font: 13px var(--mono); padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--control); color: var(--ink); width: 100%; min-width: 0;
+}
+.dlg input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.dlg input.invalid { border-color: var(--err); outline-color: var(--err); }
+.dlg input::placeholder { color: var(--gutter-ink); }
+.field { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-weight: 600; }
+.field input { max-width: 280px; }
+.col-grid, .col-row {
+  display: grid; gap: 6px; align-items: center;
+  grid-template-columns: minmax(110px, 1.2fr) minmax(90px, 1fr) 34px 34px 46px minmax(120px, 1.1fr) 86px;
+}
+.col-head { font-size: 12px; color: var(--muted); padding: 0 0 4px; }
+.col-head span:nth-child(n+3):nth-child(-n+5) { text-align: center; }
+.col-row { padding: 3px 0; }
+.chk { display: grid; place-items: center; cursor: pointer; }
+.chk input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+.chk input:disabled { cursor: default; opacity: .6; }
+.c-fk { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.fk-chip {
+  font: 12.5px var(--mono); color: var(--hl-arrow); padding: 3px 7px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.c-actions { display: flex; gap: 2px; justify-content: flex-end; }
+.icon-x { width: 26px; height: 26px; padding: 0; line-height: 1; }
+.icon-x:disabled { opacity: .35; cursor: default; }
+.icon-btn.link svg { width: 16px; height: 16px; }
+#tdAdd { margin-top: 8px; }
+.dlg-error { color: var(--err); min-height: 20px; margin: 10px 0 4px; font-size: 13px; }
+.dlg-actions { display: flex; gap: 8px; align-items: center; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.danger { color: var(--err); }
+button.danger.armed { background: var(--err); color: #fff; border-color: var(--err); }
+
+/* Foreign-key chooser, opened under a column row */
+.col-row.fk-open .c-fk button { border-color: var(--accent); }
+.fk-panel {
+  display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.4fr); gap: 12px;
+  margin: 4px 0 10px; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; background: var(--soft);
+}
+.fk-left, .fk-right { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fk-list {
+  height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--control);
+  display: flex; flex-direction: column; padding: 3px;
+}
+.fk-item {
+  border: 0; border-radius: 4px; background: none; text-align: left; padding: 4px 8px;
+  font: 13px var(--mono); flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fk-item:hover { background: var(--soft); }
+.fk-item.on { background: var(--accent); color: var(--accent-ink); }
+.fk-item em { font-style: normal; opacity: .65; font-family: inherit; }
+.fk-item b { font: 600 10.5px -apple-system, "Segoe UI", sans-serif; opacity: .7; margin-left: 4px; }
+.fk-item i { font: italic 11px -apple-system, "Segoe UI", sans-serif; color: var(--warn); margin-left: 4px; }
+.fk-item.on i, .fk-item.on b { color: inherit; }
+.fk-empty { color: var(--muted); font-size: 12.5px; padding: 8px; }
+.fk-pk { display: flex; align-items: center; gap: 6px; font-size: 13px; height: 29px; cursor: pointer; }
+.fk-pk input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.fk-foot { display: flex; align-items: center; gap: 8px; }
+#fkPreview { font: 13px var(--mono); color: var(--hl-arrow); }
+button:disabled.primary { opacity: .45; cursor: default; }
+
 [hidden] { display: none !important; }

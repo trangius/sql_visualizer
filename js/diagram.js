@@ -325,9 +325,9 @@ function computeGeometry() {
       edges.push({
         a, b,
         from: t.name + '.' + c.name,
-        to: c.target.name + '.' + c.target.idCol.name,
+        to: c.target.name + '.' + c.targetCol.name,
         sy: a.y + rowY(i),
-        ty: b.y + rowY(c.target.cols.indexOf(c.target.idCol)),
+        ty: b.y + rowY(c.target.cols.indexOf(c.targetCol)),
       });
     });
   }

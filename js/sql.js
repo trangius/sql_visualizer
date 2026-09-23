@@ -42,7 +42,7 @@ function genSQL(tables) {
     if (t.pkCols.length) defs.push(`  PRIMARY KEY (${t.pkCols.map(c => q(c.name)).join(', ')})`);
     for (const c of t.cols) {
       if (!c.target) continue;
-      const fk = `FOREIGN KEY (${q(c.name)}) REFERENCES ${q(c.target.name)}(${q(c.target.idCol.name)})`;
+      const fk = `FOREIGN KEY (${q(c.name)}) REFERENCES ${q(c.target.name)}(${q(c.targetCol.name)})`;
       if (created.has(c.target)) defs.push('  ' + fk);
       else deferred.push(`ALTER TABLE ${q(t.name)} ADD ${fk};`);
     }
@@ -288,6 +288,7 @@ function finalizeTable(acc, warn, error) {
     nullable: !c.notNull && !pkSet.has(lc(c.name)) && !(c === id && !pkSet.size),
     unique: c.unique,
     ref: null,
+    refCol: null,
     line: c.line,
   }));
   const find = n => cols.find(c => lc(c.name) === lc(n));
@@ -300,11 +301,8 @@ function finalizeTable(acc, warn, error) {
     if (fk.cols.length !== 1) { error(fk.line, `Composite foreign key (${fk.cols.join(', ')}) can't be drawn as one arrow`); continue; }
     const col = find(fk.cols[0]);
     if (!col) { error(fk.line, `Foreign key column ${fk.cols[0]} does not exist in ${acc.name}`); continue; }
-    if (fk.rcols.length && !isIdName(fk.rcols[0])) {
-      error(fk.line, `${acc.name}.${col.name} references ${fk.rt}(${fk.rcols[0]}). Arrows can only point to Id.`);
-      continue;
-    }
     col.ref = fk.rt;
+    col.refCol = fk.rcols[0] ?? null; // genText writes just "-> Table" when this is the table's primary key
   }
   return { name: acc.name, line: acc.line, cols };
 }

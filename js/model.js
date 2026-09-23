@@ -33,7 +33,8 @@ function sqlType(t) {
 }
 
 // ─── Text syntax → model ─────────────────────────────────────────────────────
-// model: { tables: [{ name, line, cols: [{ name, type, pk, nullable, unique, ref, line }] }] }
+// model: { tables: [{ name, line, cols: [{ name, type, pk, nullable, unique, ref, refCol, line }] }] }
+// ref/refCol: "-> Table" (its primary key, refCol null) or "-> Table.Column"
 
 const FLAG = /^\(?(pk|null|unique)\)?$/i;
 
@@ -69,14 +70,13 @@ function parseText(src) {
 
     const parts = code.split('->');
     if (parts.length > 2) { problems.push(problem(line, 'Only one -> per column')); return; }
-    let ref = null;
+    let ref = null, refCol = null;
     if (parts.length === 2) {
       const target = parts[1].trim();
       const m = target.match(/^([\p{L}_][\p{L}\p{N}_$]*)(?:\s*[.(]\s*([\p{L}_][\p{L}\p{N}_$]*)\s*\)?)?$/u);
       if (!target) problems.push(problem(line, 'Missing table name after ->'));
-      else if (!m) problems.push(problem(line, `"${target}" is not a valid table name`));
-      else if (m[2] && !isIdName(m[2])) problems.push(problem(line, `Arrows can only point to Id, not ${m[2]}`));
-      else ref = m[1];
+      else if (!m) problems.push(problem(line, `"${target}" is not a valid table or Table.Column`));
+      else { ref = m[1]; refCol = m[2] ?? null; }
     }
 
     const toks = parts[0].trim().match(/[^\s(]+(?:\([^)]*\)?)?|\([^)]*\)?/g) || [];
@@ -92,7 +92,7 @@ function parseText(src) {
       problems.push(problem(line, `Column ${name} is defined twice in ${cur.name}`));
       return;
     }
-    const col = { name, type: null, pk: false, nullable: false, unique: false, ref, line };
+    const col = { name, type: null, pk: false, nullable: false, unique: false, ref, refCol, line };
     const typeParts = [];
     for (const t of toks) {
       const f = t.match(FLAG);
@@ -109,13 +109,14 @@ function parseText(src) {
 
 // ─── Resolve: primary keys, arrows, default types ────────────────────────────
 
-function defaultType(c) {
+// An FK column without a type gets the type of the column it points to
+function defaultType(c, seen = new Set()) {
   if (isIdName(c.name)) return 'int';
-  if (c.target) return effType(c.target.idCol);
+  if (c.targetCol && !seen.has(c)) { seen.add(c); return effType(c.targetCol, seen); }
   if (c.ref) return 'int';
   return 'vc';
 }
-function effType(c) { return c.type ? normType(c.type) : defaultType(c); }
+function effType(c, seen) { return c.type ? normType(c.type) : defaultType(c, seen); }
 
 function resolve(tables) {
   const problems = [];
@@ -129,14 +130,26 @@ function resolve(tables) {
   for (const t of tables) {
     if (!t.cols.length) problems.push(problem(t.line, `${t.name} has no columns`, 'warn'));
     for (const c of t.cols) {
-      c.target = null;
-      c.refError = null;
-      if (c.ref) {
-        const tt = exact.get(c.ref) || lower.get(c.ref.toLowerCase());
-        if (!tt) c.refError = `No table named ${c.ref}`;
-        else if (!tt.idCol) c.refError = `${tt.name} has no Id column. Arrows can only point to Id.`;
-        else c.target = tt;
-        if (c.refError) problems.push(problem(c.line, c.refError));
+      c.target = c.targetCol = c.refError = null;
+      if (!c.ref) continue;
+      const tt = exact.get(c.ref) || lower.get(c.ref.toLowerCase());
+      if (!tt) c.refError = `No table named ${c.ref}`;
+      else if (c.refCol) {
+        const col = tt.cols.find(o => o.name.toLowerCase() === c.refCol.toLowerCase());
+        if (col) { c.target = tt; c.targetCol = col; }
+        else c.refError = `${tt.name} has no column ${c.refCol}`;
+      } else if (tt.pkCols.length === 1) {
+        c.target = tt;
+        c.targetCol = tt.pkCols[0];
+      } else {
+        c.refError = tt.pkCols.length
+          ? `${tt.name} has a primary key of several columns. Write -> ${tt.name}.Column`
+          : `${tt.name} has no primary key. Write -> ${tt.name}.Column`;
+      }
+      if (c.refError) problems.push(problem(c.line, c.refError));
+      else if (!(tt.pkCols.length === 1 && tt.pkCols[0] === c.targetCol) && !c.targetCol.unique) {
+        problems.push(problem(c.line, `${tt.name}.${c.targetCol.name} is neither the primary key nor unique. ` +
+          'MariaDB needs an index on it, and normally it should be unique.', 'warn'));
       }
     }
   }
@@ -152,6 +165,13 @@ function resolve(tables) {
 }
 
 // ─── Model → text syntax ─────────────────────────────────────────────────────
+
+// "-> Table" when it points to the table's (single) primary key, otherwise "-> Table.Column"
+function refText(c) {
+  if (!c.target) return c.ref + (c.refCol ? '.' + c.refCol : '');
+  const pk = c.target.pkCols.length === 1 && c.target.pkCols[0] === c.targetCol;
+  return c.target.name + (pk ? '' : '.' + c.targetCol.name);
+}
 
 function genText(tables, notes) {
   const out = [];
@@ -169,7 +189,7 @@ function genText(tables, notes) {
       if (c.pk) parts.push('pk');
       if (c.nullable) parts.push('null');
       if (c.unique) parts.push('unique');
-      if (c.ref) parts.push('-> ' + c.ref);
+      if (c.ref) parts.push('-> ' + refText(c));
       out.push('  ' + parts.join(' '));
     }
   });

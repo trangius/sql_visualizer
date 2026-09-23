@@ -80,7 +80,10 @@ function selectLine(n) {
 }
 
 function insertText(s) {
-  if (!document.execCommand('insertText', false, s)) ta.setRangeText(s, ta.selectionStart, ta.selectionEnd, 'end');
+  if (!document.execCommand('insertText', false, s)) {
+    ta.setRangeText(s, ta.selectionStart, ta.selectionEnd, 'end');
+    ta.dispatchEvent(new Event('input'));
+  }
 }
 
 ta.addEventListener('keydown', e => {
