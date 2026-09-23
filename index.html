@@ -151,17 +151,17 @@
           <button id="helpClose" class="btn-outline">Back to editor</button>
         </div>
 <pre class="help-code"><span class="t-com"># comment</span>
-<span class="t-tbl">Owner</span>                <span class="t-com">← table: no indentation</span>
-  Id                 <span class="t-com">← int, primary key</span>
-  Name               <span class="t-com">← no type = vc (varchar(128))</span>
+<span class="t-tbl">Owner</span>          <span class="t-com">← table: no indent</span>
+  Id           <span class="t-com">← int, primary key</span>
+  Name         <span class="t-com">← no type = vc</span>
   Email <span class="t-type">vc</span> <span class="t-flag">unique</span>
 
 <span class="t-tbl">Dog</span>
-  OwnerId <span class="t-arrow">-&gt; Owner</span>       <span class="t-com">← FK to Owner's PK</span>
+  OwnerId <span class="t-arrow">-&gt; Owner</span>   <span class="t-com">← FK to its PK</span>
   OwnerMail <span class="t-arrow">-&gt; Owner.Email</span>
 
-<span class="t-tbl">DogToShow</span>            <span class="t-com">← no Id = no PK…</span>
-  DogId <span class="t-flag">pk</span> <span class="t-arrow">-&gt; Dog</span>       <span class="t-com">← …unless you write pk</span></pre>
+<span class="t-tbl">DogToShow</span>      <span class="t-com">← no Id = no PK…</span>
+  DogId <span class="t-flag">pk</span> <span class="t-arrow">-&gt; Dog</span>  <span class="t-com">← …unless pk</span></pre>
         <div class="help-grid">
           <code class="t-flag">pk</code><div>Primary key. An explicit <b>pk</b> wins over <b>Id</b>.</div>
           <code class="t-flag">null</code><div>Column may be NULL (default is NOT NULL).</div>

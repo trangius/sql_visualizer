@@ -347,6 +347,7 @@ main { flex: 1; display: flex; min-height: 0; }
 
 /* syntax reference: covers the editor, not its header or status bar */
 #help {
+  container-type: inline-size;
   position: absolute; inset: 0; background: var(--panel); overflow: auto; z-index: 5;
   padding: 18px 20px 28px; display: flex; flex-direction: column; gap: 14px; line-height: 1.55;
 }
@@ -354,7 +355,11 @@ main { flex: 1; display: flex; min-height: 0; }
 .help-title { font-weight: 600; font-size: 14px; }
 .help-code {
   margin: 0; padding: 12px 14px; background: var(--soft); border-radius: 8px;
-  font: 12px/20px var(--mono); overflow: auto; color: var(--fg);
+  font-family: var(--mono); color: var(--fg);
+  /* the longest line is ~36 characters (≈ 22em): shrink a little in a narrow editor so it
+     still fits; below 10px it wraps instead. Never scrollbars. */
+  font-size: clamp(10px, calc((100cqi - 70px) / 22), 12px); line-height: 1.65;
+  white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .help-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: baseline; }
 .help-grid code { font: 12px var(--mono); }
