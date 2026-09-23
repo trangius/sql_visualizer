@@ -365,6 +365,23 @@ main { flex: 1; display: flex; min-height: 0; }
 .status.warn .dot { background: var(--warn); }
 .status.warn .status-text { color: var(--warn); }
 .status-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status .chev { display: none; flex: none; transition: transform .15s; }
+.status.has-problems .chev { display: block; }
+.status[aria-expanded="true"] .chev { transform: rotate(180deg); }
+
+/* all problems, expanded from the status bar; click one to jump to its line */
+.problem-list {
+  flex: none; max-height: 40%; overflow: auto; padding: 4px; border-top: 1px solid var(--line);
+  background: var(--panel); font-size: 12.5px; line-height: 1.45;
+}
+.problem {
+  display: grid; grid-template-columns: 7px auto 1fr; gap: 8px; align-items: baseline; width: 100%;
+  padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; color: var(--fg);
+}
+.problem:hover { background: var(--hover); }
+.problem .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); transform: translateY(-1px); }
+.problem.warn .dot { background: var(--warn); }
+.problem .where { font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
 .summary { white-space: nowrap; }
 
 /* ─── Canvas ──────────────────────────────────────────────────────────────── */

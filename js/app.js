@@ -73,12 +73,27 @@ function updateStatus(problems) {
   $('#statusText').textContent = !n
     ? (state.mode === 'sql' ? 'MariaDB · No problems' : 'No problems')
     : `${n} problem${n > 1 ? 's' : ''} · ${firstProblem.line ? 'Line ' + firstProblem.line + ': ' : ''}${firstProblem.msg}`;
-  $('#statusText').title = n ? sorted.map(p => (p.line ? `Line ${p.line}: ` : '') + p.msg).join('\n') : '';
+  $('#statusText').title = n ? 'Click to see all problems' : '';
+  // the expandable list of every problem (closes by itself when there are none)
+  $('#problemList').innerHTML = sorted.map(p =>
+    `<button class="problem ${p.level}" role="listitem" data-line="${p.line ?? ''}">` +
+    `<span class="dot"></span><span class="where">${p.line ? 'Line ' + p.line : ''}</span>` +
+    `<span>${esc(p.msg)}</span></button>`).join('');
+  if (!n) setProblemList(false);
   const tables = model.tables ?? [];
   const rels = tables.reduce((k, t) => k + t.cols.filter(c => c.target).length, 0);
   $('#summary').textContent = `${tables.length} table${tables.length === 1 ? '' : 's'} · ${rels} relation${rels === 1 ? '' : 's'}`;
 }
-$('#statusBtn').onclick = () => { if (firstProblem?.line) selectLine(firstProblem.line); };
+function setProblemList(open) {
+  $('#problemList').hidden = !open;
+  $('#statusBtn').setAttribute('aria-expanded', String(open));
+}
+$('#statusBtn').onclick = () => { if (firstProblem) setProblemList($('#problemList').hidden); };
+$('#problemList').addEventListener('click', e => {
+  const b = e.target.closest('.problem');
+  if (b?.dataset.line) selectLine(+b.dataset.line);
+});
+$('#problemList').addEventListener('keydown', e => { if (e.key === 'Escape') { setProblemList(false); $('#statusBtn').focus(); } });
 
 function syncScroll() {
   hl.scrollTop = ta.scrollTop;
