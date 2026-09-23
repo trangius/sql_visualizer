@@ -35,6 +35,17 @@
       <svg width="16" height="16" class="ico thin" aria-hidden="true"><rect class="fill" x="2" y="3" width="6" height="10" rx="1"/><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M8 2.5v11"/></svg>
     </button>
   </div>
+  <div class="vsep"></div>
+  <select id="notationSel" class="select" title="Relationship notation" aria-label="Relationship notation">
+    <option value="arrows">Arrows (SQL)</option>
+    <option value="crowsfoot">Crow's foot</option>
+    <option value="uml">UML</option>
+    <option value="ratio">1 : N</option>
+  </select>
+  <button id="styleBtn" class="icon-btn style-btn" aria-pressed="false">
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path class="head" d="M2.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h10A1.5 1.5 0 0 1 15.5 4v1.5z"/><rect class="frame" x="2.5" y="2.5" width="13" height="13" rx="1.5"/><path class="rows" d="M2.5 5.5h13M5 8.5h8M5 11.5h6"/></svg>
+  </button>
+  <div class="vsep"></div>
   <select id="examples" class="select" title="Load an example">
     <option value="" selected disabled>Open example…</option>
     <option value="school">Skoldatabasen</option>
@@ -203,20 +214,6 @@
         <svg width="14" height="14" class="ico thin" aria-hidden="true"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="8" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1"/><rect x="8" y="8" width="4.5" height="4.5" rx="1"/></svg>
         Auto layout
       </button>
-    </div>
-
-    <div class="card card-tr">
-      <select id="notationSel" class="select sm" title="Relationship notation" aria-label="Relationship notation">
-        <option value="arrows">Arrows (SQL)</option>
-        <option value="crowsfoot">Crow's foot</option>
-        <option value="uml">UML</option>
-        <option value="ratio">1 : N</option>
-      </select>
-      <div class="vsep sm"></div>
-      <div id="styleSeg" class="style-seg">
-        <button class="tool style-tab" data-style="classic"><span class="swatch classic"></span>Classic</button>
-        <button class="tool style-tab" data-style="filled"><span class="swatch filled"></span>Filled</button>
-      </div>
     </div>
 
     <div id="notationNote" class="note" role="dialog" aria-labelledby="noteTitle" hidden>

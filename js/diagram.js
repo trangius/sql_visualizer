@@ -724,12 +724,14 @@ function boxesOverlap() {
 function applyStyle() {
   if (state.style !== 'filled') state.style = 'classic'; // "green" from older versions → classic/filled
   svg.classList.toggle('style-filled', state.style === 'filled');
-  document.querySelectorAll('#styleSeg button').forEach(b => b.classList.toggle('on', b.dataset.style === state.style));
+  const filled = state.style === 'filled', btn = $('#styleBtn');
+  btn.classList.toggle('filled', filled);
+  btn.setAttribute('aria-pressed', filled);
+  btn.title = filled ? 'Diagram style: Filled headers (click for Classic)' : 'Diagram style: Classic (click for filled headers)';
+  btn.setAttribute('aria-label', btn.title);
 }
-$('#styleSeg').addEventListener('click', e => {
-  const b = e.target.closest('button');
-  if (!b) return;
-  state.style = b.dataset.style;
+$('#styleBtn').addEventListener('click', () => {
+  state.style = state.style === 'filled' ? 'classic' : 'filled';
   applyStyle();
   saveState();
 });
