@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}a:hover{color:var(--fg)}
+:root,[data-theme="light"]{color-scheme:light;--bg:#f5efe2;--panel:#faf6ee;--soft:#f0e8d6;--canvas:#f5efe2;--dot:#dccfb4;--line:#e6dcc6;--line2:#dccfb4;--hover:#f0e8d6;--fg:#1c1812;--muted:#5e5440;--faint:#8a7e60;--accent:#3a4658;--accent-fg:#faf6ee;--accent-soft:#e5e0d2;--err:#7a2e22;--sel:rgba(58,70,88,.18);--shadow:0 1px 2px rgba(60,40,10,.06),0 4px 14px rgba(60,40,10,.06);--tok-tbl:#7e5414;--tok-type:#3a4658;--tok-flag:#6e3a2e;--tok-arrow:#525e1e;--tok-ref:#525e1e;--tok-com:#8a7e60;--edge:#5e5440;--box-bg:#fffcf5;--box-head:#fffcf5;--box-head-fg:#1c1812;--box-border:#d3cab2;--row-hover:#f5efe2;--toast:#1c1812;--toast-fg:#faf6ee}
+[data-theme="dark"]{color-scheme:dark;--bg:#101012;--panel:#1b1c1e;--soft:#232427;--canvas:#141414;--dot:#2c2d31;--line:#2c2d31;--line2:#35363b;--hover:#2c2d31;--fg:#d4ccbf;--muted:#a8a8a4;--faint:#5a5b5e;--accent:#8ab1c8;--accent-fg:#141414;--accent-soft:#1f2a31;--err:#c4928e;--sel:rgba(138,177,200,.25);--shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);--tok-tbl:#c8a878;--tok-type:#8ab1c8;--tok-flag:#d4a8a0;--tok-arrow:#a8c896;--tok-ref:#a8c896;--tok-com:#6e6f72;--edge:#818387;--box-bg:#1b1c1e;--box-head:#1b1c1e;--box-head-fg:#d4ccbf;--box-border:#37383d;--row-hover:#232427;--toast:#d4ccbf;--toast-fg:#141414}
+[data-diagram="green"]{--box-head:var(--accent);--box-head-fg:var(--accent-fg);--box-border:var(--accent)}
+textarea::selection{background:var(--sel)}
+</style>
+</helmet>
+<div data-theme="{{ theme }}" data-diagram="{{ diagram }}" style="height:100vh; display:flex; flex-direction:column; background:var(--bg); color:var(--fg); font-family:'Geist',system-ui,sans-serif; font-size:13px; -webkit-font-smoothing:antialiased">
+
+  <header style="height:52px; flex:none; display:flex; align-items:center; gap:12px; padding:0 12px 0 16px; border-bottom:1px solid var(--line); background:var(--panel); position:relative; z-index:20">
+    <div style="display:flex; align-items:center; gap:10px; min-width:0">
+      <div style="width:24px; height:24px; border-radius:6px; background:var(--accent); display:flex; flex-direction:column; justify-content:center; gap:3px; padding:0 5px; flex:none">
+        <div style="height:2px; border-radius:1px; background:var(--accent-fg)"></div>
+        <div style="height:2px; width:70%; border-radius:1px; background:var(--accent-fg); opacity:.7"></div>
+        <div style="height:2px; width:85%; border-radius:1px; background:var(--accent-fg); opacity:.7"></div>
+      </div>
+      <div style="font-weight:600; font-size:14.5px; letter-spacing:-.01em; white-space:nowrap">SQL Visualizer</div>
+      <div style="color:var(--muted); font-size:13px; white-space:nowrap">arrow diagrams</div>
+    </div>
+    <div style="flex:1"></div>
+    <select value="" onChange="{{ onExample }}" title="Load an example" style="appearance:none; -webkit-appearance:none; height:32px; padding:0 32px 0 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel) url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='%238a857c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E&quot;) no-repeat right 9px center; font-size:13px; cursor:pointer">
+      <option value="" disabled="">Load example…</option>
+      <option value="tour">Syntax tour</option>
+      <option value="dogs">Hundutställningen</option>
+      <option value="housing">Hyresvärdarna</option>
+      <option value="projects">Projektdatabasen</option>
+      <option value="store">Klädaffären</option>
+      <option value="empty">Empty</option>
+    </select>
+    <div style="position:relative">
+      <button onClick="{{ toggleExport }}" style="height:32px; display:flex; align-items:center; gap:7px; padding:0 10px 0 12px; border:0; border-radius:8px; background:var(--accent); color:var(--accent-fg); font-weight:500; cursor:pointer">
+        <svg width="16" height="16" style="fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round"><path d="M8 2.5v7.5M4.5 6.5 8 10l3.5-3.5M3 13.5h10"></path></svg>
+        Export
+        <svg width="12" height="16" style="fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; opacity:.8"><path d="M2.5 6.5 6 10l3.5-3.5"></path></svg>
+      </button>
+      <sc-if value="{{ exportOpen }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ closeMenus }}" style="position:fixed; inset:0; z-index:1"></div>
+        <div style="position:absolute; right:0; top:38px; width:230px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:5px; z-index:2; display:flex; flex-direction:column; gap:1px">
+          <div style="padding:6px 9px 4px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em">Diagram</div>
+          <button onClick="{{ exportSvg }}" style="display:flex; justify-content:space-between; align-items:center; height:32px; padding:0 9px; border:0; background:transparent; border-radius:6px; cursor:pointer; text-align:left" style-hover="background:var(--hover)"><span>SVG image</span><span style="font-family:'Geist Mono',monospace; font-size:11px; color:var(--muted)">.svg</span></button>
+          <button onClick="{{ exportPng }}" style="display:flex; justify-content:space-between; align-items:center; height:32px; padding:0 9px; border:0; background:transparent; border-radius:6px; cursor:pointer; text-align:left" style-hover="background:var(--hover)"><span>PNG image</span><span style="font-family:'Geist Mono',monospace; font-size:11px; color:var(--muted)">.png</span></button>
+          <div style="height:1px; background:var(--line); margin:4px 4px"></div>
+          <div style="padding:6px 9px 4px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em">Schema</div>
+          <button onClick="{{ exportSql }}" style="display:flex; justify-content:space-between; align-items:center; height:32px; padding:0 9px; border:0; background:transparent; border-radius:6px; cursor:pointer; text-align:left" style-hover="background:var(--hover)"><span>MariaDB script</span><span style="font-family:'Geist Mono',monospace; font-size:11px; color:var(--muted)">.sql</span></button>
+          <button onClick="{{ copySql }}" style="display:flex; justify-content:space-between; align-items:center; height:32px; padding:0 9px; border:0; background:transparent; border-radius:6px; cursor:pointer; text-align:left" style-hover="background:var(--hover)"><span>Copy SQL</span><span style="font-family:'Geist Mono',monospace; font-size:11px; color:var(--muted)">⌘⇧C</span></button>
+        </div>
+      </sc-if>
+    </div>
+    <div style="width:1px; height:20px; background:var(--line)"></div>
+    <button onClick="{{ toggleTheme }}" title="Toggle dark mode" style="width:32px; height:32px; display:grid; place-items:center; border:0; border-radius:8px; background:transparent; cursor:pointer; color:var(--muted)" style-hover="background:var(--hover); color:var(--fg)">
+      <sc-if value="{{ isDark }}" hint-placeholder-val="{{ false }}">
+        <svg width="16" height="16" style="fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"></path></svg>
+      </sc-if>
+      <sc-if value="{{ isLight }}" hint-placeholder-val="{{ true }}">
+        <svg width="16" height="16" style="fill:currentColor"><path d="M13.6 9.6A6 6 0 0 1 6.4 2.4a6 6 0 1 0 7.2 7.2z"></path></svg>
+      </sc-if>
+    </button>
+  </header>
+
+  <div style="flex:1; min-height:0; display:flex">
+    <section style="width:{{ leftW }}px; flex:none; display:flex; flex-direction:column; background:var(--panel); position:relative; min-width:0">
+      <div style="height:46px; flex:none; display:flex; align-items:center; gap:8px; padding:0 8px 0 12px; border-bottom:1px solid var(--line)">
+        <div style="display:flex; padding:2px; gap:2px; background:var(--soft); border-radius:8px">
+          <sc-for list="{{ modeTabs }}" as="m" hint-placeholder-count="2">
+            <button onClick="{{ m.onClick }}" style="height:26px; padding:0 12px; border:0; border-radius:6px; background:{{ m.bg }}; color:{{ m.fg }}; box-shadow:{{ m.sh }}; font-weight:500; font-size:12.5px; cursor:pointer">{{ m.label }}</button>
+          </sc-for>
+        </div>
+        <div style="flex:1"></div>
+        <button onClick="{{ undo }}" disabled="{{ noUndo }}" title="Undo (⌘Z)" style="width:30px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; background:transparent; color:var(--muted); cursor:pointer; opacity:{{ undoOp }}" style-hover="background:var(--hover); color:var(--fg)">
+          <svg width="16" height="16" style="fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round"><path d="M5.5 9.5 2.5 6.5l3-3"></path><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7.5"></path></svg>
+        </button>
+        <button onClick="{{ redo }}" disabled="{{ noRedo }}" title="Redo (⇧⌘Z)" style="width:30px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; background:transparent; color:var(--muted); cursor:pointer; opacity:{{ redoOp }}" style-hover="background:var(--hover); color:var(--fg)">
+          <svg width="16" height="16" style="fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round"><path d="M10.5 9.5l3-3-3-3"></path><path d="M13.5 6.5H6a3.5 3.5 0 0 0 0 7h2.5"></path></svg>
+        </button>
+        <div style="width:1px; height:18px; background:var(--line); margin:0 2px"></div>
+        <button onClick="{{ toggleHelp }}" title="Syntax reference" style="height:30px; display:flex; align-items:center; gap:6px; padding:0 10px 0 8px; border:0; border-radius:7px; background:{{ helpBg }}; color:{{ helpFg }}; cursor:pointer; font-size:12.5px; font-weight:500" style-hover="background:var(--hover); color:var(--fg)">
+          <span style="width:16px; height:16px; border-radius:50%; border:1.5px solid currentColor; display:grid; place-items:center; font-size:10px; font-weight:600; line-height:1">?</span>
+          Syntax
+        </button>
+      </div>
+
+      <div style="flex:1; min-height:0; display:flex; position:relative">
+        <div ref="{{ gutterRef }}" style="width:46px; flex:none; overflow:hidden; padding:14px 0; text-align:right; font-family:'Geist Mono',monospace; font-size:12px; line-height:20px; color:var(--faint); user-select:none; background:var(--panel)">
+          <sc-for list="{{ lines }}" as="l" hint-placeholder-count="20">
+            <div title="{{ l.msg }}" style="height:20px; padding-right:12px; color:{{ l.gc }}; font-weight:{{ l.gw }}">{{ l.n }}</div>
+          </sc-for>
+          <div style="height:200px"></div>
+        </div>
+        <div style="position:relative; flex:1; min-width:0">
+          <div ref="{{ hlRef }}" style="position:absolute; inset:0; overflow:hidden; padding:14px 16px 14px 6px; font-family:'Geist Mono',monospace; font-size:13px; line-height:20px; pointer-events:none; color:var(--fg)">
+            <sc-for list="{{ lines }}" as="l" hint-placeholder-count="20">
+              <div style="height:20px; white-space:pre; text-decoration:{{ l.u }}; text-decoration-skip-ink:none"><sc-for list="{{ l.toks }}" as="t"><span style="color:{{ t.c }}">{{ t.s }}</span></sc-for></div>
+            </sc-for>
+            <div style="height:200px"></div>
+          </div>
+          <textarea ref="{{ taRef }}" value="{{ editorValue }}" onChange="{{ onInput }}" onScroll="{{ onScroll }}" onKeyDown="{{ onKey }}" readOnly="{{ sqlMode }}" spellCheck="false" wrap="off" autoCapitalize="off" autoComplete="off" style="position:absolute; inset:0; width:100%; height:100%; margin:0; padding:14px 16px 214px 6px; border:0; outline:none; resize:none; background:transparent; color:transparent; caret-color:var(--fg); font-family:'Geist Mono',monospace; font-size:13px; line-height:20px; white-space:pre; overflow:auto; tab-size:2"></textarea>
+        </div>
+
+        <sc-if value="{{ help }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; inset:0; background:var(--panel); overflow:auto; padding:18px 20px 28px; z-index:5; display:flex; flex-direction:column; gap:14px; font-size:13px; line-height:1.55">
+            <div style="display:flex; align-items:center; gap:8px">
+              <div style="font-weight:600; font-size:14px">Syntax reference</div>
+              <div style="flex:1"></div>
+              <button onClick="{{ toggleHelp }}" style="height:28px; padding:0 10px; border:1px solid var(--line); border-radius:7px; background:var(--panel); cursor:pointer; font-size:12.5px" style-hover="background:var(--hover)">Back to editor</button>
+            </div>
+            <pre style="margin:0; padding:12px 14px; background:var(--soft); border-radius:8px; font-family:'Geist Mono',monospace; font-size:12px; line-height:20px; overflow:auto; color:var(--fg)"><span style="color:var(--tok-com)"># comment</span>
+<span style="color:var(--tok-tbl)">Owner</span>                <span style="color:var(--tok-com)">← table: no indentation</span>
+  Id                 <span style="color:var(--tok-com)">← int, primary key</span>
+  Name               <span style="color:var(--tok-com)">← no type = vc (varchar(128))</span>
+  Email <span style="color:var(--tok-type)">vc</span> <span style="color:var(--tok-flag)">unique</span>
+
+<span style="color:var(--tok-tbl)">Dog</span>
+  OwnerId <span style="color:var(--tok-arrow)">-&gt; Owner</span>       <span style="color:var(--tok-com)">← FK to Owner's PK</span>
+  OwnerMail <span style="color:var(--tok-arrow)">-&gt; Owner.Email</span>
+
+<span style="color:var(--tok-tbl)">DogToShow</span>            <span style="color:var(--tok-com)">← no Id = no PK…</span>
+  DogId <span style="color:var(--tok-flag)">pk</span> <span style="color:var(--tok-arrow)">-&gt; Dog</span>       <span style="color:var(--tok-com)">← …unless you write pk</span></pre>
+            <div style="display:grid; grid-template-columns:auto 1fr; gap:8px 16px; align-items:baseline">
+              <code style="font-family:'Geist Mono',monospace; font-size:12px; color:var(--tok-flag)">pk</code><div>Primary key. An explicit <b style="font-weight:600">pk</b> wins over <b style="font-weight:600">Id</b>.</div>
+              <code style="font-family:'Geist Mono',monospace; font-size:12px; color:var(--tok-flag)">null</code><div>Column may be NULL (default is NOT NULL).</div>
+              <code style="font-family:'Geist Mono',monospace; font-size:12px; color:var(--tok-flag)">unique</code><div>UNIQUE constraint — this is how 1‑1 is made.</div>
+              <code style="font-family:'Geist Mono',monospace; font-size:12px; color:var(--tok-arrow)">-&gt; Table</code><div>Foreign key to that table's primary key. The column inherits its type.</div>
+              <code style="font-family:'Geist Mono',monospace; font-size:12px; color:var(--tok-arrow)">-&gt; T.Col</code><div>Foreign key to a specific (PK or unique) column.</div>
+              <code style="font-family:'Geist Mono',monospace; font-size:12px; color:var(--tok-type)">vc</code><div>varchar(128). Other types as-is: int, text, date, datetime, decimal(8,2)…</div>
+            </div>
+            <div style="height:1px; background:var(--line)"></div>
+            <div style="display:grid; grid-template-columns:auto 1fr; gap:6px 16px; color:var(--muted)">
+              <span style="color:var(--fg)">Drag header</span><span>Move a table</span>
+              <span style="color:var(--fg)">Drag canvas</span><span>Pan</span>
+              <span style="color:var(--fg)">⌘ + scroll</span><span>Zoom</span>
+              <span style="color:var(--fg)">Click a row</span><span>Jump to its line</span>
+              <span style="color:var(--fg)">Hover a table</span><span>Highlight its arrows</span>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="height:32px; flex:none; display:flex; align-items:center; gap:10px; padding:0 12px; border-top:1px solid var(--line); font-size:12px; color:var(--muted); min-width:0">
+        <button onClick="{{ jumpProblem }}" style="display:flex; align-items:center; gap:7px; border:0; background:transparent; padding:0; cursor:{{ probCursor }}; min-width:0; color:inherit">
+          <span style="width:7px; height:7px; border-radius:50%; background:{{ statusDot }}; flex:none"></span>
+          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:{{ statusColor }}">{{ statusText }}</span>
+        </button>
+        <div style="flex:1"></div>
+        <span style="white-space:nowrap">{{ summary }}</span>
+      </div>
+    </section>
+
+    <div onPointerDown="{{ startSplit }}" style="width:9px; margin:0 -4px; flex:none; cursor:col-resize; position:relative; z-index:6; display:flex; justify-content:center" style-hover="background:transparent">
+      <div style="width:1px; height:100%; background:{{ splitColor }}"></div>
+    </div>
+
+    <section ref="{{ canvasRef }}" onPointerDown="{{ startPan }}" style="flex:1; min-width:0; position:relative; overflow:hidden; background-color:var(--canvas); background-image:radial-gradient(var(--dot) 1px, transparent 1.3px); background-size:{{ grid }}px {{ grid }}px; background-position:{{ panX }}px {{ panY }}px; cursor:{{ canvasCursor }}; touch-action:none; user-select:none">
+      <div style="position:absolute; left:0; top:0; transform-origin:0 0; transform:translate({{ panX }}px, {{ panY }}px) scale({{ zoom }})">
+        <svg width="1" height="1" style="position:absolute; left:0; top:0; overflow:visible; pointer-events:none">
+          <sc-for list="{{ edges }}" as="e">
+            <path d="{{ e.d }}" style="fill:none; stroke:{{ e.color }}; stroke-width:{{ e.w }}; stroke-linejoin:round"></path>
+            <path d="{{ e.head }}" style="fill:{{ e.color }}; stroke:none"></path>
+            <circle cx="{{ e.cx }}" cy="{{ e.cy }}" r="3" style="fill:var(--canvas); stroke:{{ e.color }}; stroke-width:1.5"></circle>
+          </sc-for>
+        </svg>
+        <sc-for list="{{ boxes }}" as="t">
+          <div data-box="1" onPointerEnter="{{ t.onEnter }}" onPointerLeave="{{ t.onLeave }}" style="position:absolute; left:{{ t.x }}px; top:{{ t.y }}px; width:{{ t.w }}px; background:var(--box-bg); border:1px solid {{ t.border }}; border-radius:9px; box-shadow:var(--shadow); overflow:hidden">
+            <div onPointerDown="{{ t.onDown }}" style="height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; background:var(--box-head); color:var(--box-head-fg); border-bottom:1px solid var(--box-border); cursor:grab; font-weight:600; font-size:13.5px; letter-spacing:-.005em">
+              <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ t.name }}</span>
+            </div>
+            <div style="padding:4px 0">
+              <sc-for list="{{ t.rows }}" as="r">
+                <div onClick="{{ r.onClick }}" style="height:30px; display:flex; align-items:center; gap:8px; padding:0 12px; cursor:pointer" style-hover="background:var(--row-hover)">
+                  <span style="width:20px; flex:none; font-family:'Geist Mono',monospace; font-size:9.5px; font-weight:600; letter-spacing:.02em; color:{{ r.keyColor }}">{{ r.key }}</span>
+                  <span style="font-weight:{{ r.fw }}; white-space:nowrap">{{ r.name }}</span>
+                  <span style="margin-left:auto; display:flex; gap:6px; align-items:baseline; white-space:nowrap">
+                    <span style="font-family:'Geist Mono',monospace; font-size:10.5px; color:var(--tok-flag)">{{ r.flags }}</span>
+                    <span style="font-family:'Geist Mono',monospace; font-size:11.5px; color:var(--muted)">{{ r.type }}</span>
+                  </span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute; inset:0; display:grid; place-items:center; pointer-events:none">
+          <div style="text-align:center; color:var(--muted); display:flex; flex-direction:column; gap:6px">
+            <div style="font-weight:600; color:var(--fg); font-size:14px">No tables yet</div>
+            <div>Type a table name in the editor, or use <b style="font-weight:600">New table</b>.</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <div data-ui="1" style="position:absolute; top:12px; left:12px; display:flex; align-items:center; gap:2px; padding:4px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow)">
+        <button onClick="{{ addTable }}" title="New table" style="height:30px; display:flex; align-items:center; gap:6px; padding:0 11px 0 9px; border:0; border-radius:7px; background:transparent; cursor:pointer; font-weight:500" style-hover="background:var(--hover)">
+          <svg width="14" height="14" style="fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round"><path d="M7 2v10M2 7h10"></path></svg>
+          New table
+        </button>
+        <div style="width:1px; height:18px; background:var(--line)"></div>
+        <button onClick="{{ relayout }}" title="Rearrange all tables" style="height:30px; display:flex; align-items:center; gap:6px; padding:0 11px 0 9px; border:0; border-radius:7px; background:transparent; cursor:pointer; font-weight:500" style-hover="background:var(--hover)">
+          <svg width="14" height="14" style="fill:none; stroke:currentColor; stroke-width:1.4; stroke-linejoin:round"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"></rect><rect x="8" y="1.5" width="4.5" height="4.5" rx="1"></rect><rect x="1.5" y="8" width="4.5" height="4.5" rx="1"></rect><rect x="8" y="8" width="4.5" height="4.5" rx="1"></rect></svg>
+          Auto layout
+        </button>
+      </div>
+
+      <div data-ui="1" style="position:absolute; top:12px; right:12px; display:flex; padding:3px; gap:2px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow)">
+        <sc-for list="{{ styleTabs }}" as="s" hint-placeholder-count="2">
+          <button onClick="{{ s.onClick }}" style="height:30px; padding:0 12px; border:0; border-radius:7px; background:{{ s.bg }}; color:{{ s.fg }}; font-weight:500; font-size:12.5px; cursor:pointer; display:flex; align-items:center; gap:7px">
+            <span style="width:10px; height:10px; border-radius:3px; border:1.5px solid {{ s.sw }}; background:{{ s.swFill }}"></span>{{ s.label }}
+          </button>
+        </sc-for>
+      </div>
+
+      <div data-ui="1" style="position:absolute; right:12px; bottom:12px; display:flex; align-items:center; gap:2px; padding:4px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow)">
+        <button onClick="{{ zoomOut }}" title="Zoom out" style="width:30px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; background:transparent; cursor:pointer" style-hover="background:var(--hover)">
+          <svg width="14" height="14" style="fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round"><path d="M2.5 7h9"></path></svg>
+        </button>
+        <button onClick="{{ zoomReset }}" title="Reset to 100%" style="min-width:50px; height:30px; border:0; border-radius:7px; background:transparent; cursor:pointer; font-family:'Geist Mono',monospace; font-size:12px; color:var(--muted)" style-hover="background:var(--hover); color:var(--fg)">{{ zoomLabel }}</button>
+        <button onClick="{{ zoomIn }}" title="Zoom in" style="width:30px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; background:transparent; cursor:pointer" style-hover="background:var(--hover)">
+          <svg width="14" height="14" style="fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round"><path d="M7 2.5v9M2.5 7h9"></path></svg>
+        </button>
+        <div style="width:1px; height:18px; background:var(--line); margin:0 2px"></div>
+        <button onClick="{{ fit }}" title="Fit diagram to view" style="height:30px; display:flex; align-items:center; gap:6px; padding:0 10px 0 8px; border:0; border-radius:7px; background:transparent; cursor:pointer; font-weight:500" style-hover="background:var(--hover)">
+          <svg width="14" height="14" style="fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round"><path d="M1.5 5V1.5H5M9 1.5h3.5V5M12.5 9v3.5H9M5 12.5H1.5V9"></path></svg>
+          Fit
+        </button>
+      </div>
+
+      <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+        <div data-ui="1" style="position:absolute; left:50%; bottom:16px; transform:translateX(-50%); background:var(--toast); color:var(--toast-fg); padding:0 6px 0 14px; height:36px; border-radius:9px; display:flex; gap:10px; align-items:center; font-size:12.5px; box-shadow:var(--shadow); white-space:nowrap">
+          <span>{{ toastMsg }}</span>
+          <sc-if value="{{ toastHasAct }}">
+            <button onClick="{{ toastAct }}" style="height:26px; padding:0 9px; border:0; border-radius:6px; background:transparent; color:var(--accent); font-weight:600; cursor:pointer">{{ toastActLabel }}</button>
+          </sc-if>
+        </div>
+      </sc-if>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showTypes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Diagram&quot;},&quot;edgeStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;orthogonal&quot;,&quot;curved&quot;],&quot;default&quot;:&quot;orthogonal&quot;,&quot;tsType&quot;:&quot;'orthogonal'|'curved'&quot;,&quot;section&quot;:&quot;Diagram&quot;}}">
+class Component extends DCLogic {
+  static EX = {
+    tour: `# Tables: a name without indentation
+# Columns: indented, "Name type flags -> Table"
+# No type means vc (varchar(128)). Id is int and the primary key.
+
+Author
+  Id
+  Name
+  Email vc unique
+  Bio text null
+
+Book
+  Id
+  Title vc(200)
+  Price decimal(8,2)
+  AuthorId -> Author
+  SequelToId null -> Book
+
+# No Id means no primary key, unless you write pk
+BookTag
+  BookId pk -> Book
+  Tag vc(32) pk
+`,
+    dogs: `# Hundutställningen
+Owner
+  Id
+  Name
+
+Race
+  Id
+  Name
+
+Dog
+  Id
+  Name
+  Age int
+  OwnerId -> Owner
+  RaceId -> Race
+  Points decimal(3,1)
+`,
+    housing: `# Hyresvärdarna (housingdb)
+Tennant
+  Id
+  Name
+  PersonalNr vc(10)
+  ApartmentId -> Apartment
+
+Apartment
+  Id
+  NrRooms int
+  HouseId -> House
+
+House
+  Id
+  Address vc(256)
+
+JanitorToHouse
+  JanitorId -> Janitor
+  HouseId -> House
+
+Janitor
+  Id
+  Name
+`,
+    projects: `# Projektdatabasen (projectplanner)
+Project
+  Id
+  Name
+  Description text
+
+Task
+  Id
+  Name
+  Description text
+  StartDate date
+  EndDate date
+  ProjectId -> Project
+
+EtoT
+  EmployeeId -> Employee
+  TaskId -> Task
+  HoursWorked int
+
+Employee
+  Id
+  Name
+  Email
+`,
+    store: `# Klädaffären (dbstore)
+ReturnStatus
+  Id
+  Name
+
+OrderStatus
+  Id
+  Name
+
+Customer
+  Id
+  Fname
+  LName
+  Address
+  Email
+
+ProductCategory
+  Id
+  Name
+  ParentCategoryId null -> ProductCategory
+
+ProductPrice
+  Id
+  ProductId -> Product
+  StartDate datetime
+  Price int
+
+Product
+  Id
+  Name
+  Description text
+  CategoryId -> ProductCategory
+
+Variant
+  Id
+  ProductId -> Product
+  Name
+  Description text
+  ImageURL vc(256)
+  Stock int
+
+COrder
+  Id
+  CreatedDate datetime
+  StatusId -> OrderStatus
+  CustomerId -> Customer
+
+ProductToOrder
+  Id
+  OrderId -> COrder
+  VariantId -> Variant
+  Name
+  Description text
+  Quantity int
+  UnitPrice decimal(10,2)
+
+Return
+  Id
+  PToOId -> ProductToOrder
+  QuantityReturned int
+  IncomeDate date
+  BackToCDate date null
+  ReturnStatusId -> ReturnStatus
+  Reason text
+  HandlerNote text
+`,
+    empty: `# Write a table name, then indented columns:
+`,
+  };
+  static NAMES = { tour: 'Syntax tour', dogs: 'Hundutställningen', housing: 'Hyresvärdarna', projects: 'Projektdatabasen', store: 'Klädaffären', empty: 'Empty' };
+
+  constructor(props) {
+    super(props);
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('sqlviz-redesign') || '{}'); } catch (e) {}
+    const text = saved.text ?? Component.EX.tour;
+    this.state = {
+      text, mode: 'text', theme: saved.theme || 'light', diagram: saved.diagram || 'classic',
+      pos: saved.pos || {}, pan: { x: 40, y: 80 }, zoom: 1, hover: null, help: false,
+      exportOpen: false, toast: null, leftW: saved.leftW || 420, hi: 0, dragging: null,
+    };
+    this.hist = [text]; this.lastPush = 0;
+    this.taRef = React.createRef(); this.hlRef = React.createRef(); this.gutterRef = React.createRef(); this.canvasRef = React.createRef();
+    const tables = this.parse(text).tables;
+    if (tables.some(t => !this.state.pos[t.name])) this.state.pos = this.layout(tables);
+  }
+
+  componentDidMount() {
+    const el = this.canvasRef.current;
+    this.onWheel = e => {
+      e.preventDefault();
+      const { pan, zoom } = this.state;
+      if (e.ctrlKey || e.metaKey) {
+        const r = el.getBoundingClientRect();
+        this.zoomAt(zoom * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+      } else this.setState({ pan: { x: pan.x - e.deltaX, y: pan.y - e.deltaY } });
+    };
+    el && el.addEventListener('wheel', this.onWheel, { passive: false });
+    requestAnimationFrame(() => this.fit());
+  }
+  componentWillUnmount() { this.canvasRef.current?.removeEventListener('wheel', this.onWheel); }
+  componentDidUpdate() {
+    clearTimeout(this.saveT);
+    this.saveT = setTimeout(() => {
+      const { text, theme, diagram, pos, leftW } = this.state;
+      try { localStorage.setItem('sqlviz-redesign', JSON.stringify({ text, theme, diagram, pos, leftW })); } catch (e) {}
+    }, 300);
+  }
+
+  // ─── Model ─────────────────────────────────────────────
+  parse(text) {
+    if (this._pc && this._pc.text === text) return this._pc.res;
+    const tables = [], problems = []; let cur = null;
+    text.split('\n').forEach((raw, i) => {
+      const code = raw.replace(/#.*$/, '');
+      if (!code.trim()) return;
+      if (!/^\s/.test(code)) {
+        cur = { name: code.trim().split(/\s+/)[0], cols: [], line: i + 1 };
+        if (tables.some(t => t.name === cur.name)) problems.push({ line: i + 1, msg: `Duplicate table “${cur.name}”` });
+        tables.push(cur); return;
+      }
+      if (!cur) { problems.push({ line: i + 1, msg: 'Column outside a table' }); return; }
+      const ai = code.indexOf('->');
+      const left = ai >= 0 ? code.slice(0, ai) : code;
+      const ref = ai >= 0 ? code.slice(ai + 2).trim() : null;
+      const parts = left.trim().split(/\s+/); const name = parts.shift();
+      const col = { name, type: null, pk: false, nul: false, uniq: false, ref, line: i + 1 };
+      parts.forEach(p => { const l = p.toLowerCase(); if (l === 'pk') col.pk = true; else if (l === 'null') col.nul = true; else if (l === 'unique') col.uniq = true; else col.type = p; });
+      cur.cols.push(col);
+    });
+    const by = Object.fromEntries(tables.map(t => [t.name, t]));
+    tables.forEach(t => {
+      if (!t.cols.some(c => c.pk)) { const id = t.cols.find(c => c.name === 'Id'); if (id) id.pk = true; }
+      t.cols.forEach(c => { if (c.name === 'Id' && !c.type && !c.ref) { c.type = 'int'; c.auto = c.pk; } });
+    });
+    tables.forEach(t => t.cols.forEach(c => {
+      if (!c.ref) return;
+      const [tn, cn] = c.ref.split('.');
+      const tt = by[tn];
+      if (!tt) { problems.push({ line: c.line, msg: `Unknown table “${tn}”` }); return; }
+      const tc = cn ? tt.cols.find(x => x.name === cn) : tt.cols.find(x => x.pk);
+      if (!tc) { problems.push({ line: c.line, msg: cn ? `${tn} has no column “${cn}”` : `${tn} has no primary key` }); return; }
+      c.target = { table: tn, col: tc.name }; if (!c.type) c.from = tc;
+    }));
+    tables.forEach(t => t.cols.forEach(c => { if (!c.type) c.type = c.from ? (c.from.type || 'vc') : 'vc'; }));
+    const res = { tables, problems, by };
+    this._pc = { text, res };
+    return res;
+  }
+  fmtType(t) { const m = /^vc(\((\d+)\))?$/i.exec(t); return m ? `varchar(${m[2] || 128})` : t; }
+  genSQL(tables) {
+    const out = ['-- Generated from the text model · MariaDB', ''];
+    tables.forEach(t => {
+      const pks = t.cols.filter(c => c.pk).map(c => c.name);
+      const defs = t.cols.map(c => `  ${c.name} ${this.fmtType(c.type).toUpperCase()}${c.nul ? ' NULL' : ' NOT NULL'}${c.auto && pks.length === 1 ? ' AUTO_INCREMENT' : ''}${c.uniq ? ' UNIQUE' : ''}`);
+      if (pks.length) defs.push(`  PRIMARY KEY (${pks.join(', ')})`);
+      t.cols.forEach(c => { if (c.target) defs.push(`  FOREIGN KEY (${c.name}) REFERENCES ${c.target.table}(${c.target.col})`); });
+      out.push(`CREATE TABLE ${t.name} (`, defs.join(',\n'), ');', '');
+    });
+    return out.join('\n');
+  }
+
+  // ─── Geometry ──────────────────────────────────────────
+  width(t) {
+    const hw = t.name.length * 8.4 + 48;
+    const rw = Math.max(0, ...t.cols.map(c => {
+      const fl = (c.nul ? 5 : 0) + (c.uniq ? 7 : 0);
+      return 52 + c.name.length * 7.4 + (this.props.showTypes === false ? 0 : this.fmtType(c.type).length * 7.1 + 14) + fl * 6.6;
+    }));
+    return Math.ceil(Math.max(190, hw, rw) / 10) * 10;
+  }
+  height(t) { return 40 + 8 + t.cols.length * 30 + 2; }
+  layout(tables) {
+    const by = Object.fromEntries(tables.map(t => [t.name, t])), lvl = {}, seen = new Set();
+    const lv = t => {
+      if (lvl[t.name] != null) return lvl[t.name];
+      if (seen.has(t.name)) return 0;
+      seen.add(t.name);
+      let m = -1;
+      t.cols.forEach(c => { if (c.target && c.target.table !== t.name && by[c.target.table]) m = Math.max(m, lv(by[c.target.table])); });
+      return (lvl[t.name] = m + 1);
+    };
+    tables.forEach(lv);
+    const cols = [];
+    tables.forEach(t => (cols[lvl[t.name]] = cols[lvl[t.name]] || []).push(t));
+    const hs = cols.map(c => (c || []).reduce((s, t) => s + this.height(t) + 44, -44));
+    const maxH = Math.max(0, ...hs), pos = {};
+    let x = 0;
+    cols.forEach((c, i) => {
+      if (!c) return;
+      let y = (maxH - hs[i]) / 2;
+      const w = Math.max(...c.map(t => this.width(t)));
+      c.forEach(t => { pos[t.name] = { x, y: Math.round(y) }; y += this.height(t) + 44; });
+      x += w + 110;
+    });
+    return pos;
+  }
+  ensurePos(text, pos, spot) {
+    const { tables } = this.parse(text);
+    const next = { ...pos };
+    let maxX = 0, minY = 0;
+    Object.values(pos).forEach(p => { maxX = Math.max(maxX, p.x + 260); });
+    tables.forEach(t => { if (!next[t.name]) { next[t.name] = spot || { x: maxX + 60, y: minY }; minY += this.height(t) + 40; } });
+    return next;
+  }
+  rpath(pts, r = 9) {
+    let d = `M${pts[0][0]},${pts[0][1]}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+      const d1 = Math.hypot(x1 - x0, y1 - y0), d2 = Math.hypot(x2 - x1, y2 - y1);
+      if (!d1 || !d2) { d += ` L${x1},${y1}`; continue; }
+      const rr = Math.min(r, d1 / 2, d2 / 2);
+      d += ` L${x1 + (x0 - x1) / d1 * rr},${y1 + (y0 - y1) / d1 * rr} Q${x1},${y1} ${x1 + (x2 - x1) / d2 * rr},${y1 + (y2 - y1) / d2 * rr}`;
+    }
+    const l = pts[pts.length - 1];
+    return d + ` L${l[0]},${l[1]}`;
+  }
+  edges(tables, by, geo) {
+    const curved = this.props.edgeStyle === 'curved', hov = this.state.hover, out = [];
+    tables.forEach(t => t.cols.forEach((c, i) => {
+      if (!c.target) return;
+      const tt = by[c.target.table], A = geo[t.name], B = geo[tt.name];
+      const j = tt.cols.findIndex(x => x.name === c.target.col);
+      const y1 = A.y + 44 + i * 30 + 15, y2 = B.y + 44 + j * 30 + 15;
+      let pts, ex, dir, sx, sd;
+      if (tt === t) { const X = A.x + A.w + 26; sx = A.x + A.w; ex = sx; dir = -1; sd = 1; pts = [[sx, y1], [X, y1], [X, y2], [ex, y2]]; }
+      else if (B.x >= A.x + A.w + 24) { sx = A.x + A.w; ex = B.x; dir = 1; sd = 1; const m = (sx + ex) / 2; pts = [[sx, y1], [m, y1], [m, y2], [ex, y2]]; }
+      else if (B.x + B.w <= A.x - 24) { sx = A.x; ex = B.x + B.w; dir = -1; sd = -1; const m = (sx + ex) / 2; pts = [[sx, y1], [m, y1], [m, y2], [ex, y2]]; }
+      else { sx = A.x + A.w; ex = B.x + B.w; dir = -1; sd = 1; const X = Math.max(sx, ex) + 30; pts = [[sx, y1], [X, y1], [X, y2], [ex, y2]]; }
+      let d;
+      if (curved && tt !== t && pts[1][0] !== Math.max(sx, ex) + 30) {
+        const k = Math.max(40, Math.abs(ex - sx) / 2);
+        d = `M${sx},${y1} C${sx + k * sd},${y1} ${ex - k * dir},${y2} ${ex - 6 * dir},${y2}`;
+      } else d = this.rpath(pts);
+      const hot = hov && (hov === t.name || hov === tt.name);
+      out.push({
+        d, hot, cx: sx, cy: y1, w: hot ? 2 : 1.4, color: hot ? 'var(--accent)' : 'var(--edge)',
+        head: `M${ex},${y2} L${ex - 9 * dir},${y2 - 4.5} L${ex - 9 * dir},${y2 + 4.5} Z`,
+      });
+    }));
+    return out.sort((a, b) => a.hot - b.hot);
+  }
+
+  // ─── Actions ───────────────────────────────────────────
+  setText(v, merge, extra = {}) {
+    const now = Date.now();
+    let hi = this.state.hi;
+    if (merge && hi === this.hist.length - 1 && hi > 0 && now - this.lastPush < 800) this.hist[hi] = v;
+    else { this.hist = this.hist.slice(0, hi + 1); this.hist.push(v); hi++; }
+    this.lastPush = now;
+    this.setState({ text: v, hi, pos: this.ensurePos(v, extra.pos || this.state.pos, extra.spot), ...extra.state });
+  }
+  go(delta) {
+    const hi = this.state.hi + delta;
+    if (hi < 0 || hi >= this.hist.length) return;
+    const text = this.hist[hi];
+    this.setState({ hi, text, pos: this.ensurePos(text, this.state.pos) });
+  }
+  toast(msg, label, act) {
+    clearTimeout(this.toastT);
+    this.setState({ toast: { msg, label, act } });
+    this.toastT = setTimeout(() => this.setState({ toast: null }), 5000);
+  }
+  canvasSize() { const r = this.canvasRef.current?.getBoundingClientRect(); return r ? { w: r.width, h: r.height } : { w: 900, h: 700 }; }
+  zoomAt(z, cx, cy) {
+    z = Math.max(0.25, Math.min(2.5, z));
+    const { pan, zoom } = this.state;
+    this.setState({ zoom: z, pan: { x: cx - (cx - pan.x) * z / zoom, y: cy - (cy - pan.y) * z / zoom } });
+  }
+  fit(posOverride) {
+    const { tables } = this.parse(this.state.text);
+    const pos = posOverride || this.state.pos;
+    if (!tables.length) return this.setState({ zoom: 1, pan: { x: 40, y: 80 } });
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    tables.forEach(t => { const p = pos[t.name] || { x: 0, y: 0 }; x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + this.width(t) + 40); y1 = Math.max(y1, p.y + this.height(t)); });
+    const { w, h } = this.canvasSize();
+    const z = Math.max(0.25, Math.min(1.25, (w - 96) / (x1 - x0), (h - 150) / (y1 - y0)));
+    this.setState({ zoom: z, pan: { x: (w - (x1 - x0) * z) / 2 - x0 * z, y: 64 + (h - 64 - 56 - (y1 - y0) * z) / 2 - y0 * z } });
+  }
+  selectLine(n) {
+    const go = () => {
+      const ta = this.taRef.current; if (!ta) return;
+      const lines = ta.value.split('\n'); let s = 0;
+      for (let i = 0; i < n - 1; i++) s += lines[i].length + 1;
+      ta.focus(); ta.setSelectionRange(s, s + (lines[n - 1] || '').length);
+      const top = (n - 1) * 20;
+      if (top < ta.scrollTop || top > ta.scrollTop + ta.clientHeight - 60) ta.scrollTop = Math.max(0, top - 60);
+      this.syncScroll();
+    };
+    if (this.state.mode !== 'text' || this.state.help) this.setState({ mode: 'text', help: false }, () => requestAnimationFrame(go)); else go();
+  }
+  syncScroll() {
+    const ta = this.taRef.current; if (!ta) return;
+    if (this.hlRef.current) { this.hlRef.current.scrollTop = ta.scrollTop; this.hlRef.current.scrollLeft = ta.scrollLeft; }
+    if (this.gutterRef.current) this.gutterRef.current.scrollTop = ta.scrollTop;
+  }
+  insert(s) {
+    const ta = this.taRef.current, a = ta.selectionStart, b = ta.selectionEnd, v = this.state.text;
+    this.setText(v.slice(0, a) + s + v.slice(b), true);
+    requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = a + s.length; });
+  }
+  drag(e, kind, name) {
+    e.stopPropagation();
+    const sx = e.clientX, sy = e.clientY, { pan, zoom, pos, leftW } = this.state;
+    const o = kind === 'box' ? { ...pos[name] } : kind === 'pan' ? { ...pan } : { w: leftW };
+    this.setState({ dragging: kind });
+    const move = ev => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (kind === 'box') this.setState(s => ({ pos: { ...s.pos, [name]: { x: Math.round(o.x + dx / zoom), y: Math.round(o.y + dy / zoom) } } }));
+      else if (kind === 'pan') this.setState({ pan: { x: o.x + dx, y: o.y + dy } });
+      else this.setState({ leftW: Math.max(300, Math.min(window.innerWidth - 380, o.w + dx)) });
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); this.setState({ dragging: null }); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  }
+  hlText(line) {
+    const toks = [], hash = line.indexOf('#');
+    const code = hash >= 0 ? line.slice(0, hash) : line, com = hash >= 0 ? line.slice(hash) : '';
+    if (code.trim()) {
+      if (!/^\s/.test(code)) toks.push({ s: code, c: 'var(--tok-tbl)' });
+      else {
+        const ai = code.indexOf('->'), left = ai >= 0 ? code.slice(0, ai) : code;
+        const m = left.match(/^(\s*)(\S*)([\s\S]*)$/);
+        toks.push({ s: m[1] + m[2], c: 'var(--fg)' });
+        m[3].split(/(\s+)/).forEach(p => { if (p) toks.push({ s: p, c: !p.trim() ? 'inherit' : /^(pk|null|unique)$/i.test(p) ? 'var(--tok-flag)' : 'var(--tok-type)' }); });
+        if (ai >= 0) { toks.push({ s: '->', c: 'var(--tok-arrow)' }); toks.push({ s: code.slice(ai + 2), c: 'var(--tok-ref)' }); }
+      }
+    } else if (code) toks.push({ s: code, c: 'inherit' });
+    if (com) toks.push({ s: com, c: 'var(--tok-com)' });
+    return toks;
+  }
+  hlSql(line) {
+    if (/^\s*--/.test(line)) return [{ s: line, c: 'var(--tok-com)' }];
+    const KW = /^(CREATE|TABLE|PRIMARY|KEY|FOREIGN|REFERENCES|NOT|NULL|AUTO_INCREMENT|UNIQUE)$/;
+    const TY = /^(INT|VARCHAR|TEXT|DATE|DATETIME|DECIMAL)/;
+    return line.split(/(\s+|[(),;])/).filter(Boolean).map(p => ({ s: p, c: KW.test(p) ? 'var(--tok-flag)' : TY.test(p) ? 'var(--tok-type)' : 'inherit' }));
+  }
+
+  renderVals() {
+    const S = this.state, { tables, problems, by } = this.parse(S.text);
+    const sqlMode = S.mode === 'sql';
+    const editorValue = sqlMode ? this.genSQL(tables) : S.text;
+    const pmap = {}; if (!sqlMode) problems.forEach(p => { pmap[p.line] = p; });
+    const lines = editorValue.split('\n').map((l, i) => {
+      const p = pmap[i + 1];
+      return { n: i + 1, toks: sqlMode ? this.hlSql(l) : this.hlText(l), gc: p ? 'var(--err)' : 'var(--faint)', gw: p ? 600 : 400, msg: p ? p.msg : '', u: p ? 'underline wavy var(--err)' : 'none' };
+    });
+    const geo = {};
+    tables.forEach(t => { const p = S.pos[t.name] || { x: 0, y: 0 }; geo[t.name] = { x: p.x, y: p.y, w: this.width(t) }; });
+    const showTypes = this.props.showTypes !== false;
+    const boxes = tables.map(t => ({
+      name: t.name, x: geo[t.name].x, y: geo[t.name].y, w: geo[t.name].w,
+      border: S.hover === t.name ? 'var(--accent)' : 'var(--box-border)',
+      onDown: e => this.drag(e, 'box', t.name),
+      onEnter: () => { if (!S.dragging) this.setState({ hover: t.name }); },
+      onLeave: () => this.setState({ hover: null }),
+      rows: t.cols.map(c => ({
+        name: c.name, type: showTypes ? this.fmtType(c.type) : '', fw: c.pk ? 600 : 400,
+        key: c.pk ? 'PK' : c.target ? 'FK' : '', keyColor: c.pk ? 'var(--accent)' : 'var(--tok-ref)',
+        flags: [c.nul && 'null', c.uniq && 'unique'].filter(Boolean).join(' '),
+        onClick: () => this.selectLine(c.line),
+      })),
+    }));
+    const edges = this.edges(tables, by, geo);
+    const tab = (on, label, onClick) => ({ label, onClick, bg: on ? 'var(--panel)' : 'transparent', fg: on ? 'var(--fg)' : 'var(--muted)', sh: on ? '0 1px 2px rgba(0,0,0,.12)' : 'none' });
+    const first = [...problems].sort((a, b) => a.line - b.line)[0];
+    const nRel = edges.length;
+    const { w: cw, h: ch } = this.canvasSize();
+    return {
+      theme: S.theme, diagram: S.diagram, isDark: S.theme === 'dark', isLight: S.theme !== 'dark',
+      leftW: S.leftW, help: S.help, exportOpen: S.exportOpen,
+      helpBg: S.help ? 'var(--accent-soft)' : 'transparent', helpFg: S.help ? 'var(--accent)' : 'var(--muted)',
+      modeTabs: [tab(!sqlMode, 'Text', () => this.setState({ mode: 'text' })), tab(sqlMode, 'SQL', () => this.setState({ mode: 'sql' }))],
+      styleTabs: [
+        { ...tab(S.diagram === 'classic', 'Classic', () => this.setState({ diagram: 'classic' })), bg: S.diagram === 'classic' ? 'var(--hover)' : 'transparent', sw: 'var(--edge)', swFill: 'var(--box-bg)' },
+        { ...tab(S.diagram === 'green', 'Filled', () => this.setState({ diagram: 'green' })), bg: S.diagram === 'green' ? 'var(--hover)' : 'transparent', sw: 'var(--accent)', swFill: 'var(--accent)' },
+      ],
+      lines, editorValue, sqlMode, taRef: this.taRef, hlRef: this.hlRef, gutterRef: this.gutterRef, canvasRef: this.canvasRef,
+      onInput: e => this.setText(e.target.value, true),
+      onScroll: () => this.syncScroll(),
+      onKey: e => {
+        const mod = e.metaKey || e.ctrlKey;
+        if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); this.go(e.shiftKey ? 1 : -1); return; }
+        if (sqlMode) return;
+        if (e.key === 'Tab') { e.preventDefault(); this.insert('  '); }
+        else if (e.key === 'Enter' && !e.shiftKey && !mod) {
+          const ta = e.target, before = ta.value.slice(0, ta.selectionStart), cur = before.slice(before.lastIndexOf('\n') + 1), code = cur.replace(/#.*$/, '');
+          const ind = !code.trim() ? cur.match(/^\s*/)[0] : /^\s/.test(code) ? code.match(/^\s*/)[0] : '  ';
+          e.preventDefault(); this.insert('\n' + ind);
+        }
+      },
+      undo: () => this.go(-1), redo: () => this.go(1),
+      noUndo: S.hi <= 0, noRedo: S.hi >= this.hist.length - 1,
+      undoOp: S.hi <= 0 ? 0.35 : 1, redoOp: S.hi >= this.hist.length - 1 ? 0.35 : 1,
+      toggleHelp: () => this.setState({ help: !S.help }),
+      toggleTheme: () => this.setState({ theme: S.theme === 'dark' ? 'light' : 'dark' }),
+      toggleExport: () => this.setState({ exportOpen: !S.exportOpen }),
+      closeMenus: () => this.setState({ exportOpen: false }),
+      exportSvg: () => { this.setState({ exportOpen: false }); this.toast('Saved diagram.svg'); },
+      exportPng: () => { this.setState({ exportOpen: false }); this.toast('Saved diagram.png'); },
+      exportSql: () => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([this.genSQL(tables)], { type: 'text/sql' }));
+        a.download = 'schema.sql'; a.click();
+        this.setState({ exportOpen: false }); this.toast('Saved schema.sql');
+      },
+      copySql: () => { navigator.clipboard?.writeText(this.genSQL(tables)); this.setState({ exportOpen: false }); this.toast('SQL copied to clipboard'); },
+      onExample: e => {
+        const key = e.target.value; e.target.value = '';
+        const text = Component.EX[key]; if (text == null) return;
+        const pos = this.layout(this.parse(text).tables);
+        this.setText(text, false, { pos, state: { mode: 'text', help: false } });
+        setTimeout(() => this.fit(pos), 0);
+        this.toast(`Loaded “${Component.NAMES[key]}”`, 'Undo', () => { this.go(-1); setTimeout(() => this.fit(), 0); });
+      },
+      statusDot: problems.length ? 'var(--err)' : 'var(--accent)',
+      statusColor: problems.length ? 'var(--err)' : 'var(--muted)',
+      statusText: problems.length ? `${problems.length} problem${problems.length > 1 ? 's' : ''} · Line ${first.line}: ${first.msg}` : sqlMode ? 'Generated MariaDB · read-only' : 'No problems',
+      probCursor: problems.length ? 'pointer' : 'default',
+      jumpProblem: () => first && this.selectLine(first.line),
+      summary: `${tables.length} table${tables.length === 1 ? '' : 's'} · ${nRel} relation${nRel === 1 ? '' : 's'}`,
+      splitColor: S.dragging === 'split' ? 'var(--accent)' : 'var(--line)',
+      startSplit: e => this.drag(e, 'split'),
+      startPan: e => { if (e.target.closest('[data-box],[data-ui]')) return; this.setState({ exportOpen: false }); this.drag(e, 'pan'); },
+      canvasCursor: S.dragging === 'pan' || S.dragging === 'box' ? 'grabbing' : 'default',
+      panX: S.pan.x, panY: S.pan.y, zoom: S.zoom, grid: 20 * S.zoom,
+      boxes, edges, empty: !tables.length,
+      addTable: () => {
+        let n = 1; while (by['Table' + n]) n++;
+        const name = 'Table' + n, sep = S.text.endsWith('\n\n') ? '' : S.text.endsWith('\n') ? '\n' : '\n\n';
+        const text = S.text + sep + `${name}\n  Id\n  Name\n`;
+        const spot = { x: Math.round((cw / 2 - S.pan.x) / S.zoom - 100), y: Math.round((ch / 2 - S.pan.y) / S.zoom - 60) };
+        this.setText(text, false, { spot, state: { mode: 'text', help: false } });
+        const line = text.split('\n').indexOf(name) + 1;
+        setTimeout(() => this.selectLine(line), 30);
+      },
+      relayout: () => { const pos = this.layout(tables); this.setState({ pos }); setTimeout(() => this.fit(pos), 0); },
+      zoomIn: () => this.zoomAt(S.zoom * 1.2, cw / 2, ch / 2),
+      zoomOut: () => this.zoomAt(S.zoom / 1.2, cw / 2, ch / 2),
+      zoomReset: () => this.zoomAt(1, cw / 2, ch / 2),
+      zoomLabel: Math.round(S.zoom * 100) + '%',
+      fit: () => this.fit(),
+      hasToast: !!S.toast, toastMsg: S.toast?.msg, toastHasAct: !!S.toast?.act, toastActLabel: S.toast?.label,
+      toastAct: () => { S.toast?.act?.(); this.setState({ toast: null }); },
+    };
+  }
+}
+</script>
+</body>
+</html>

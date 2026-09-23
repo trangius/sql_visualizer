@@ -2,31 +2,51 @@
 
 // ─── Diagram geometry ────────────────────────────────────────────────────────
 
-const HEAD_H = 30, ROW_H = 26, PAD_X = 10, TOP_PAD = 4, BOTTOM_PAD = 6, MIN_W = 130;
-const FONT = '14px Helvetica, Arial, sans-serif';
+// Box anatomy (from the design): 40px header, rows of 30px starting 4px below it
+const HEAD_H = 40, ROW_H = 30, ROWS_TOP = 44, PAD_X = 12, BADGE_W = 20, GAP = 8, MIN_W = 190;
+const UI_FONT = "'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif";
+const MONO_FONT = "'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
+const FONTS = {
+  head: `600 13.5px ${UI_FONT}`,
+  name: `400 13px ${UI_FONT}`,
+  pk: `600 13px ${UI_FONT}`,
+  key: `600 9.5px ${MONO_FONT}`,
+  flags: `400 10.5px ${MONO_FONT}`,
+  type: `400 11.5px ${MONO_FONT}`,
+};
 const measureCtx = document.createElement('canvas').getContext('2d');
-measureCtx.font = FONT;
 const widthCache = new Map();
-function textW(s) {
-  if (!widthCache.has(s)) widthCache.set(s, measureCtx.measureText(s).width);
-  return widthCache.get(s);
+function textW(s, font) {
+  const k = font + '\u0000' + s;
+  if (!widthCache.has(k)) { measureCtx.font = font; widthCache.set(k, measureCtx.measureText(s).width); }
+  return widthCache.get(k);
 }
 
-function rowLabel(c) {
-  let s = `${c.name}:${c.type ?? c.effType}`;
-  if (c.isPk) s += ' (PK)';
-  if (c.nullable) s += ' (NULL)';
-  if (c.unique) s += ' (UNIQUE)';
-  return s;
+// How a type is shown in a box: vc spelled out as varchar(n)
+function displayType(c) {
+  const t = c.type ? normType(c.type) : c.effType;
+  const m = t.match(/^vc(?:\((\d+)\))?(?=$|\s)(.*)$/);
+  return m ? `varchar(${m[1] || DEFAULT_VC})${m[2]}` : t;
+}
+
+function rowInfo(c) {
+  return {
+    key: c.isPk ? 'PK' : c.ref ? 'FK' : '',
+    name: c.name,
+    bold: c.isPk,
+    flags: [c.nullable && 'null', c.unique && 'unique'].filter(Boolean).join(' '),
+    type: displayType(c),
+  };
 }
 
 function measureTable(t) {
-  const labels = t.cols.map(rowLabel);
-  const w = Math.ceil(Math.max(MIN_W, textW(t.name) + 48, ...labels.map(l => textW(l) + 2 * PAD_X + 4)));
-  const h = HEAD_H + TOP_PAD + Math.max(1, t.cols.length) * ROW_H + BOTTOM_PAD;
-  return { w, h, labels };
+  const rows = t.cols.map(rowInfo);
+  const w = Math.max(MIN_W, textW(t.name, FONTS.head) + 2 * PAD_X + 12, ...rows.map(r =>
+    PAD_X + BADGE_W + GAP + textW(r.name, r.bold ? FONTS.pk : FONTS.name) + 16 +
+    (r.flags ? textW(r.flags, FONTS.flags) + 6 : 0) + textW(r.type, FONTS.type) + PAD_X));
+  return { w: Math.ceil(w / 10) * 10, h: ROWS_TOP + Math.max(1, t.cols.length) * ROW_H + 6, rows };
 }
-const rowY = i => HEAD_H + TOP_PAD + i * ROW_H + ROW_H / 2;
+const rowY = i => ROWS_TOP + i * ROW_H + ROW_H / 2;
 
 // Positions for tables that don't have one yet (see layout.js for how a spot is chosen).
 // The newest auto-placed table "floats": until it is dragged or another table is added,
@@ -228,14 +248,23 @@ function routeEdges(edges, boxes) {
   }
 }
 
-function pathD(points) {
+// Orthogonal path with rounded corners (radius 9, smaller on short segments)
+function pathD(points, r = 9) {
   // drop points in the middle of straight runs
   const p = points.filter((q, i) => {
     if (i === 0 || i === points.length - 1) return true;
     const a = points[i - 1], b = points[i + 1];
     return !((a[0] === q[0] && q[0] === b[0]) || (a[1] === q[1] && q[1] === b[1]));
   });
-  return 'M' + p.map(q => q[0] + ',' + q[1]).join('L');
+  let d = `M${p[0][0]},${p[0][1]}`;
+  for (let i = 1; i < p.length - 1; i++) {
+    const [x0, y0] = p[i - 1], [x1, y1] = p[i], [x2, y2] = p[i + 1];
+    const d1 = Math.hypot(x1 - x0, y1 - y0), d2 = Math.hypot(x2 - x1, y2 - y1);
+    const rr = Math.min(r, d1 / 2, d2 / 2);
+    d += `L${x1 + (x0 - x1) / d1 * rr},${y1 + (y0 - y1) / d1 * rr}Q${x1},${y1} ${x1 + (x2 - x1) / d2 * rr},${y1 + (y2 - y1) / d2 * rr}`;
+  }
+  const l = p[p.length - 1];
+  return d + `L${l[0]},${l[1]}`;
 }
 
 class MinHeap {
@@ -270,39 +299,39 @@ class MinHeap {
   }
 }
 
+
 // ─── Diagram rendering ───────────────────────────────────────────────────────
 
-// Colors come from the page's --d-* variables (dark mode). A standalone export
-// has no such variables, so it always falls back to the light, print-ready values.
+// Colors come from the page's theme variables. A standalone export has no such
+// variables, so it falls back to the light palette (print-ready).
 const DIAGRAM_CSS = `
-.bg { fill: var(--d-box, #fff); }
-.head { fill: var(--d-head, #fff); }
-.outline { fill: none; stroke: var(--d-stroke, #000); stroke-width: 1; }
-.sep { stroke: var(--d-stroke, #000); stroke-width: 1; }
-.ico { fill: var(--d-box, #fff); stroke: var(--d-ico, #999); stroke-width: 1; }
-.ico-l { stroke: var(--d-ico, #666); stroke-width: 1; }
-text { font: ${FONT}; fill: var(--d-text, #000); dominant-baseline: central; }
-.title { text-anchor: middle; }
-.row.bad text { fill: var(--d-bad, #d93025); }
+.box { fill: var(--box-bg, #fffcf5); filter: var(--box-shadow, none); }
+.head { fill: var(--box-head, #fffcf5); }
+.sep, .outline { fill: none; stroke: var(--box-border, #d3cab2); stroke-width: 1; }
+.tbl:hover .outline { stroke: var(--accent, #3a4658); }
+text { dominant-baseline: central; }
+.title { font: ${FONTS.head}; letter-spacing: -.005em; fill: var(--box-head-fg, #1c1812); }
 .row .hit { fill: transparent; }
-.row.hl .hit { fill: var(--d-hl-row, rgba(15, 148, 136, .14)); }
-.edge { fill: none; stroke: var(--d-stroke, #000); stroke-width: 1.2; }
-.edge.hl { stroke: var(--d-hl, #0f9488); stroke-width: 2.4; }
+.row:hover .hit { fill: var(--row-hover, #f5efe2); }
+.key { font: ${FONTS.key}; letter-spacing: .02em; fill: var(--accent, #3a4658); }
+.key.fk { fill: var(--tok-ref, #525e1e); }
+.name { font: ${FONTS.name}; fill: var(--fg, #1c1812); }
+.row.pk .name { font-weight: 600; }
+.flags { font: ${FONTS.flags}; fill: var(--tok-flag, #6e3a2e); }
+.type { font: ${FONTS.type}; fill: var(--muted, #5e5440); }
+.row.bad .name, .row.bad .key { fill: var(--err, #7a2e22); }
+.edge { fill: none; stroke: var(--edge, #5e5440); stroke-width: 1.4; stroke-linejoin: round; }
+.ahead { fill: var(--edge, #5e5440); }
+.start { fill: var(--canvas, #fff); stroke: var(--edge, #5e5440); stroke-width: 1.5; }
+.edge-g.hl .edge { stroke: var(--accent, #3a4658); stroke-width: 2; }
+.edge-g.hl .ahead { fill: var(--accent, #3a4658); }
+.edge-g.hl .start { stroke: var(--accent, #3a4658); }
 .edge-hit { fill: none; stroke: transparent; stroke-width: 9; }
-.arrowhead { fill: var(--d-stroke, #000); }
-.arrowhead.hl { fill: var(--d-hl, #0f9488); }
-.style-green .head { fill: var(--d-green-head, #d5e8d4); }
-.style-green .outline, .style-green .sep { stroke: var(--d-green-stroke, #82b366); }
+.style-filled { --box-head: var(--accent, #3a4658); --box-head-fg: var(--accent-fg, #faf6ee); --box-border: var(--accent, #3a4658); }
 `;
-const DEFS = `
-<marker id="ah" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">
-  <path class="arrowhead" d="M0,0 L10,5 L0,10 L3,5 z"/></marker>
-<marker id="ah-hl" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">
-  <path class="arrowhead hl" d="M0,0 L10,5 L0,10 L3,5 z"/></marker>`;
 
 const svg = $('#canvas'), vp = $('#vp');
 $('#diagramCss').textContent = DIAGRAM_CSS;
-$('#defs').innerHTML = DEFS;
 
 let geometry = { boxes: new Map(), edges: [] };
 
@@ -312,7 +341,7 @@ function computeGeometry() {
   ensurePositions(tables, dims);
   const boxes = new Map(tables.map(t => {
     const d = dims.get(t);
-    return [t, { x: pos[t.name].x, y: pos[t.name].y, w: d.w, h: d.h, labels: d.labels }];
+    return [t, { x: pos[t.name].x, y: pos[t.name].y, w: d.w, h: d.h, rows: d.rows }];
   }));
   const edges = [];
   for (const t of tables) {
@@ -321,6 +350,7 @@ function computeGeometry() {
       const a = boxes.get(t), b = boxes.get(c.target);
       edges.push({
         a, b,
+        fromTable: t.name, toTable: c.target.name,
         from: t.name + '.' + c.name,
         to: c.target.name + '.' + c.targetCol.name,
         sy: a.y + rowY(i),
@@ -332,83 +362,106 @@ function computeGeometry() {
   geometry = { boxes, edges, dims };
 }
 
+function boxMarkup(t, b, interactive) {
+  const { w, h } = b, r = 9;
+  let s = `<g class="tbl" data-t="${esc(t.name)}" transform="translate(${b.x},${b.y})">`;
+  s += `<rect class="box" width="${w}" height="${h}" rx="${r}"/>`;
+  s += `<path class="head" d="M0,${r}A${r},${r} 0 0 1 ${r},0H${w - r}A${r},${r} 0 0 1 ${w},${r}V${HEAD_H}H0Z"/>`;
+  s += `<line class="sep" x1="0" y1="${HEAD_H + .5}" x2="${w}" y2="${HEAD_H + .5}"/>`;
+  s += `<text class="title" x="${PAD_X}" y="${HEAD_H / 2}">${esc(t.name)}</text>`;
+  t.cols.forEach((c, i) => {
+    const row = b.rows[i], y = rowY(i);
+    const cls = 'row' + (c.isPk ? ' pk' : '') + (c.ref && !c.target ? ' bad' : '');
+    s += `<g class="${cls}" data-key="${esc(t.name + '.' + c.name)}" data-line="${c.line}">`;
+    if (c.ref && !c.target) s += `<title>${esc(c.refError)}</title>`;
+    if (interactive) s += `<rect class="hit" x="1" y="${y - ROW_H / 2}" width="${w - 2}" height="${ROW_H}"/>`;
+    if (row.key) s += `<text class="key${row.key === 'FK' ? ' fk' : ''}" x="${PAD_X}" y="${y}">${row.key}</text>`;
+    s += `<text class="name" x="${PAD_X + BADGE_W + GAP}" y="${y}">${esc(row.name)}</text>`;
+    s += `<text class="type" x="${w - PAD_X}" y="${y}" text-anchor="end">${esc(row.type)}</text>`;
+    if (row.flags) {
+      const fx = w - PAD_X - textW(row.type, FONTS.type) - 6;
+      s += `<text class="flags" x="${fx}" y="${y}" text-anchor="end">${row.flags}</text>`;
+    }
+    s += '</g>';
+  });
+  s += `<rect class="outline" x=".5" y=".5" width="${w - 1}" height="${h - 1}" rx="${r - .5}"/></g>`;
+  return s;
+}
+
+// An arrow: rounded path, a hollow circle at the FK row, a filled 9×9 arrowhead at the target
+function edgeMarkup(e, interactive) {
+  const pts = e.points, [ex, ey] = pts[pts.length - 1], [px] = pts[pts.length - 2];
+  const dir = ex >= px ? 1 : -1;
+  let s = `<g class="edge-g" data-from="${esc(e.from)}" data-to="${esc(e.to)}" data-ft="${esc(e.fromTable)}" data-tt="${esc(e.toTable)}">`;
+  if (interactive) s += `<path class="edge-hit" d="${e.d}"/>`;
+  s += `<path class="edge" d="${e.d}"/>`;
+  s += `<path class="ahead" d="M${ex},${ey}L${ex - 9 * dir},${ey - 4.5}L${ex - 9 * dir},${ey + 4.5}Z"/>`;
+  s += `<circle class="start" cx="${pts[0][0]}" cy="${pts[0][1]}" r="3"/></g>`;
+  return s;
+}
+
 function diagramMarkup(interactive) {
   let s = '';
-  for (const [t, b] of geometry.boxes) {
-    s += `<g class="tbl" data-t="${esc(t.name)}" transform="translate(${b.x},${b.y})">`;
-    s += `<rect class="bg" width="${b.w}" height="${b.h}"/>`;
-    s += `<rect class="head" width="${b.w}" height="${HEAD_H}"/>`;
-    s += `<line class="sep" x1="0" y1="${HEAD_H}" x2="${b.w}" y2="${HEAD_H}"/>`;
-    s += `<rect class="ico" x="6.5" y="6.5" width="9" height="9"/><line class="ico-l" x1="8.5" y1="11" x2="13.5" y2="11"/>`;
-    s += `<text class="title" x="${b.w / 2}" y="${HEAD_H / 2}">${esc(t.name)}</text>`;
-    t.cols.forEach((c, i) => {
-      const bad = c.ref && !c.target;
-      s += `<g class="row${bad ? ' bad' : ''}" data-key="${esc(t.name + '.' + c.name)}" data-line="${c.line}">`;
-      if (bad) s += `<title>${esc(c.refError)}</title>`;
-      if (interactive) s += `<rect class="hit" x="1" y="${rowY(i) - ROW_H / 2}" width="${b.w - 2}" height="${ROW_H}"/>`;
-      s += `<text x="${PAD_X}" y="${rowY(i)}">${esc(b.labels[i])}</text></g>`;
-    });
-    s += `<rect class="outline" x="0.5" y="0.5" width="${b.w - 1}" height="${b.h - 1}"/></g>`;
-  }
-  for (const e of geometry.edges) {
-    s += `<g class="edge-g" data-from="${esc(e.from)}" data-to="${esc(e.to)}">`;
-    if (interactive) s += `<path class="edge-hit" d="${e.d}"/>`;
-    s += `<path class="edge" d="${e.d}" marker-end="url(#ah)"/></g>`;
-  }
+  for (const [t, b] of geometry.boxes) s += boxMarkup(t, b, interactive);
+  for (const e of geometry.edges) s += edgeMarkup(e, interactive);
   return s;
 }
 
 function drawDiagram() {
   computeGeometry();
   vp.innerHTML = diagramMarkup(true);
+  $('#emptyState').hidden = model.tables.length > 0;
+  if (hoverTable) highlightTable(hoverTable);
   if (revealName) { reveal(revealName); revealName = null; }
 }
 
-// Hovering a row or an arrow highlights the arrow and both ends
-function setHighlight(keys, edgeEls) {
-  vp.querySelectorAll('.hl').forEach(el => el.classList.remove('hl'));
-  vp.querySelectorAll('.edge[marker-end="url(#ah-hl)"]').forEach(el => el.setAttribute('marker-end', 'url(#ah)'));
+// Hovering a table highlights its arrows (drawn on top); hovering an arrow highlights it
+let hoverTable = null;
+function setHighlight(edgeEls) {
+  vp.querySelectorAll('.edge-g.hl').forEach(el => el.classList.remove('hl'));
   for (const g of edgeEls) {
-    const p = g.querySelector('.edge');
-    p.classList.add('hl');
-    p.setAttribute('marker-end', 'url(#ah-hl)');
+    g.classList.add('hl');
     g.parentNode.appendChild(g); // bring to front
   }
-  for (const k of keys) vp.querySelectorAll(`.row[data-key="${CSS.escape(k)}"]`).forEach(r => r.classList.add('hl'));
+}
+function highlightTable(name) {
+  setHighlight([...vp.querySelectorAll('.edge-g')].filter(g => g.dataset.ft === name || g.dataset.tt === name));
 }
 svg.addEventListener('mouseover', e => {
   if (drag) return;
-  const row = e.target.closest('.row'), edge = e.target.closest('.edge-g');
-  if (edge) {
-    setHighlight([edge.dataset.from, edge.dataset.to], [edge]);
-  } else if (row) {
-    const k = row.dataset.key;
-    const els = [...vp.querySelectorAll('.edge-g')].filter(g => g.dataset.from === k || g.dataset.to === k);
-    setHighlight(new Set([k, ...els.flatMap(g => [g.dataset.from, g.dataset.to])]), els);
-  } else {
-    setHighlight([], []);
-  }
+  const tbl = e.target.closest('.tbl'), edge = e.target.closest('.edge-g');
+  hoverTable = tbl ? tbl.dataset.t : null;
+  if (edge) setHighlight([edge]);
+  else if (tbl) highlightTable(tbl.dataset.t);
+  else setHighlight([]);
 });
+svg.addEventListener('mouseleave', () => { hoverTable = null; setHighlight([]); });
 
 // ─── Pan, zoom, drag ─────────────────────────────────────────────────────────
 
 const view = { tx: 0, ty: 0, s: 1 };
+const ZOOM_MIN = 0.25, ZOOM_MAX = 2.5;
+const CARD_TOP = 64, CARD_BOTTOM = 56; // room kept for the floating toolbars
+
 function applyView() {
   vp.setAttribute('transform', `translate(${view.tx},${view.ty}) scale(${view.s})`);
   svg.style.backgroundSize = `${20 * view.s}px ${20 * view.s}px`;
   svg.style.backgroundPosition = `${view.tx}px ${view.ty}px`;
+  $('#zoomLabel').textContent = Math.round(view.s * 100) + '%';
 }
 function toWorld(e) {
   const r = svg.getBoundingClientRect();
   return { x: (e.clientX - r.left - view.tx) / view.s, y: (e.clientY - r.top - view.ty) / view.s };
 }
-function zoomAt(cx, cy, k) {
-  const s = Math.min(4, Math.max(0.15, view.s * k));
+function zoomTo(s, cx, cy) {
+  s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, s));
   view.tx = cx - (cx - view.tx) * (s / view.s);
   view.ty = cy - (cy - view.ty) * (s / view.s);
   view.s = s;
   applyView();
 }
+const zoomAt = (cx, cy, k) => zoomTo(view.s * k, cx, cy);
+
 // The middle of what's on screen, in diagram coordinates (where unconnected new tables go)
 function viewCenter() {
   const r = svg.getBoundingClientRect();
@@ -421,11 +474,12 @@ function reveal(name) {
   const t = model.tables.find(t => t.name === name), b = t && geometry.boxes.get(t);
   const r = svg.getBoundingClientRect();
   if (!b || !r.width) return;
-  const m = 30, top = 50; // keep clear of the toolbar
+  const m = 30;
   const x0 = b.x * view.s + view.tx, y0 = b.y * view.s + view.ty;
   const x1 = x0 + b.w * view.s, y1 = y0 + b.h * view.s;
   if (x0 < m) view.tx += m - x0; else if (x1 > r.width - m) view.tx -= Math.min(x1 - (r.width - m), x0 - m);
-  if (y0 < top) view.ty += top - y0; else if (y1 > r.height - m) view.ty -= Math.min(y1 - (r.height - m), y0 - top);
+  if (y0 < CARD_TOP) view.ty += CARD_TOP - y0;
+  else if (y1 > r.height - CARD_BOTTOM) view.ty -= Math.min(y1 - (r.height - CARD_BOTTOM), y0 - CARD_TOP);
   applyView();
 }
 
@@ -437,18 +491,20 @@ function contentBounds(pad) {
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 function fit() {
-  const bb = contentBounds(50);
   const r = svg.getBoundingClientRect();
-  if (!bb || !r.width) return;
-  view.s = Math.min(1.4, r.width / bb.w, (r.height - 40) / bb.h);
+  const bb = contentBounds(20);
+  if (!r.width) return;
+  if (!bb) { view.s = 1; view.tx = 40; view.ty = 80; applyView(); return; }
+  view.s = Math.max(ZOOM_MIN, Math.min(1.25, (r.width - 96) / bb.w, (r.height - CARD_TOP - CARD_BOTTOM - 30) / bb.h));
   view.tx = (r.width - bb.w * view.s) / 2 - bb.x * view.s;
-  view.ty = 40 + (r.height - 40 - bb.h * view.s) / 2 - bb.y * view.s;
+  view.ty = CARD_TOP + (r.height - CARD_TOP - CARD_BOTTOM - bb.h * view.s) / 2 - bb.y * view.s;
   applyView();
 }
 
 let drag = null, frame = 0;
 svg.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
+  closeMenus();
   const g = e.target.closest('.tbl');
   svg.setPointerCapture(e.pointerId);
   if (g) {
@@ -469,7 +525,7 @@ svg.addEventListener('pointermove', e => {
     return;
   }
   if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
-  if (!drag.moved) histBegin('move');
+  if (!drag.moved) { histBegin('move'); svg.classList.add('dragging'); }
   drag.moved = true;
   const w = toWorld(e);
   pos[drag.name] = { x: Math.round((w.x - drag.dx) / 10) * 10, y: Math.round((w.y - drag.dy) / 10) * 10 };
@@ -485,7 +541,7 @@ function endDrag() {
       if (t) selectLine(t.line);
     }
   }
-  svg.classList.remove('panning');
+  svg.classList.remove('panning', 'dragging');
   drag = null;
 }
 svg.addEventListener('pointerup', endDrag);
@@ -502,9 +558,10 @@ svg.addEventListener('wheel', e => {
   }
 }, { passive: false });
 
-const zoomCenter = k => { const r = svg.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, k); };
-$('#zoomIn').onclick = () => zoomCenter(1.2);
-$('#zoomOut').onclick = () => zoomCenter(1 / 1.2);
+const viewMiddle = () => { const r = svg.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
+$('#zoomIn').onclick = () => zoomTo(view.s * 1.2, ...viewMiddle());
+$('#zoomOut').onclick = () => zoomTo(view.s / 1.2, ...viewMiddle());
+$('#zoomLabel').onclick = () => zoomTo(1, ...viewMiddle());
 $('#fitBtn').onclick = fit;
 $('#layoutBtn').onclick = () => {
   histRecord('layout', () => arrangeAll(model.tables, geometry.dims));
@@ -513,10 +570,11 @@ $('#layoutBtn').onclick = () => {
   fit();
 };
 
-// ─── Style and export ────────────────────────────────────────────────────────
+// ─── Diagram style ───────────────────────────────────────────────────────────
 
 function applyStyle() {
-  svg.classList.toggle('style-green', state.style === 'green');
+  if (state.style !== 'filled') state.style = 'classic'; // "green" from older versions → classic/filled
+  svg.classList.toggle('style-filled', state.style === 'filled');
   document.querySelectorAll('#styleSeg button').forEach(b => b.classList.toggle('on', b.dataset.style === state.style));
 }
 $('#styleSeg').addEventListener('click', e => {
@@ -527,13 +585,42 @@ $('#styleSeg').addEventListener('click', e => {
   saveState();
 });
 
-function exportMarkup() {
+// ─── Export ──────────────────────────────────────────────────────────────────
+
+// The fonts, embedded, so an exported SVG/PNG looks the same without Geist installed.
+// Only the latin subsets (covers å ä ö). Fetched once; without network the export
+// simply falls back to system fonts.
+let fontCssPromise = null;
+function embeddedFontCss() {
+  fontCssPromise ??= (async () => {
+    try {
+      const css = await (await fetch('https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=Geist+Mono:wght@400;600&display=swap')).text();
+      const faces = css.split('/*').filter(b => /^\s*latin(-ext)?\s*\*\//.test(b)).map(b => b.slice(b.indexOf('@font-face')));
+      const out = await Promise.all(faces.map(async face => {
+        const url = face.match(/url\((https:[^)]+)\)/)?.[1];
+        if (!url) return '';
+        const buf = await (await fetch(url)).arrayBuffer();
+        let bin = '';
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return face.replace(url, 'data:font/woff2;base64,' + btoa(bin));
+      }));
+      return out.join('\n');
+    } catch {
+      return '';
+    }
+  })();
+  return fontCssPromise;
+}
+
+async function exportMarkup() {
   const bb = contentBounds(30);
   if (!bb) return null;
+  const fonts = await embeddedFontCss();
   return {
     bb,
     svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${bb.w}" height="${bb.h}" viewBox="${bb.x} ${bb.y} ${bb.w} ${bb.h}"` +
-      ` class="${state.style === 'green' ? 'style-green' : ''}"><style>${DIAGRAM_CSS}</style><defs>${DEFS}</defs>` +
+      ` class="${state.style === 'filled' ? 'style-filled' : ''}"><style>${fonts}${DIAGRAM_CSS}</style>` +
       `<rect x="${bb.x}" y="${bb.y}" width="${bb.w}" height="${bb.h}" fill="#fff"/>${diagramMarkup(false)}</svg>`,
   };
 }
@@ -545,13 +632,17 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 const exportName = ext => (model.tables[0]?.name ?? 'diagram').toLowerCase() + '-diagram.' + ext;
-$('#svgBtn').onclick = () => {
-  const m = exportMarkup();
-  if (m) download(new Blob([m.svg], { type: 'image/svg+xml' }), exportName('svg'));
-};
-$('#pngBtn').onclick = () => {
-  const m = exportMarkup();
-  if (!m) return;
+
+async function exportSvg() {
+  const m = await exportMarkup();
+  if (!m) return toast('Nothing to export yet');
+  const name = exportName('svg');
+  download(new Blob([m.svg], { type: 'image/svg+xml' }), name);
+  toast(`Saved ${name}`);
+}
+async function exportPng() {
+  const m = await exportMarkup();
+  if (!m) return toast('Nothing to export yet');
   const img = new Image();
   img.onload = () => {
     const k = 2, c = document.createElement('canvas');
@@ -560,7 +651,8 @@ $('#pngBtn').onclick = () => {
     const ctx = c.getContext('2d');
     ctx.scale(k, k);
     ctx.drawImage(img, 0, 0);
-    c.toBlob(b => download(b, exportName('png')));
+    const name = exportName('png');
+    c.toBlob(b => { download(b, name); toast(`Saved ${name}`); });
   };
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(m.svg);
-};
+}

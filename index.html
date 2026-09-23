@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SQL Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <script>
   // apply a saved light/dark choice before first paint; "auto" follows the system
@@ -14,11 +17,15 @@
 </script>
 </head>
 <body>
-<header>
-  <h1>SQL Visualizer <span>arrow diagrams</span></h1>
+<header class="appbar">
+  <div class="brand">
+    <div class="logo" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="title">SQL Visualizer</div>
+    <div class="subtitle">arrow diagrams</div>
+  </div>
   <div class="spacer"></div>
-  <select id="examples" title="Load an example">
-    <option value="" selected disabled>Examples…</option>
+  <select id="examples" class="select" title="Load an example">
+    <option value="" selected disabled>Load example…</option>
     <option value="school">Skoldatabasen</option>
     <option value="tour">Syntax tour</option>
     <option value="dogs">Hundutställningen</option>
@@ -27,89 +34,153 @@
     <option value="store">Klädaffären</option>
     <option value="empty">Empty</option>
   </select>
+  <div class="menu-wrap">
+    <button id="exportBtn" class="btn-primary" aria-haspopup="menu" aria-expanded="false">
+      <svg width="16" height="16" class="ico" aria-hidden="true"><path d="M8 2.5v7.5M4.5 6.5 8 10l3.5-3.5M3 13.5h10"/></svg>
+      Export
+      <svg width="12" height="16" class="ico chev" aria-hidden="true"><path d="M2.5 6.5 6 10l3.5-3.5"/></svg>
+    </button>
+    <div id="exportMenu" class="menu" role="menu" hidden>
+      <div class="menu-label">Diagram</div>
+      <button id="svgBtn" role="menuitem"><span>SVG image</span><span class="ext">.svg</span></button>
+      <button id="pngBtn" role="menuitem"><span>PNG image</span><span class="ext">.png</span></button>
+      <div class="menu-sep"></div>
+      <div class="menu-label">Schema</div>
+      <button id="sqlBtn" role="menuitem"><span>MariaDB script</span><span class="ext">.sql</span></button>
+      <button id="copySqlBtn" role="menuitem"><span>Copy SQL</span><span class="ext">⌘⇧C</span></button>
+    </div>
+  </div>
+  <div class="vsep"></div>
   <button id="themeBtn" class="icon-btn" aria-label="Toggle dark mode">
-    <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5a8.5 8.5 0 1 0 10.6 10.6z"/></svg>
-    <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+    <svg width="16" height="16" class="ico sun" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/></svg>
+    <svg width="16" height="16" class="moon" aria-hidden="true"><path d="M13.6 9.6A6 6 0 0 1 6.4 2.4a6 6 0 1 0 7.2 7.2z"/></svg>
   </button>
 </header>
+
 <main>
   <section id="left">
-    <div class="bar">
+    <div class="editor-head">
       <div class="seg" id="modeSeg">
         <button data-mode="text">Text</button>
         <button data-mode="sql">SQL</button>
       </div>
       <div class="spacer"></div>
-      <button id="undoBtn" class="icon-btn" title="Undo (⌘Z)" aria-label="Undo" disabled>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      <button id="undoBtn" class="icon-btn sm" title="Undo (⌘Z)" aria-label="Undo" disabled>
+        <svg width="16" height="16" class="ico" aria-hidden="true"><path d="M5.5 9.5 2.5 6.5l3-3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7.5"/></svg>
       </button>
-      <button id="redoBtn" class="icon-btn" title="Redo (⇧⌘Z)" aria-label="Redo" disabled>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+      <button id="redoBtn" class="icon-btn sm" title="Redo (⇧⌘Z)" aria-label="Redo" disabled>
+        <svg width="16" height="16" class="ico" aria-hidden="true"><path d="m10.5 9.5 3-3-3-3"/><path d="M13.5 6.5H6a3.5 3.5 0 0 0 0 7h2.5"/></svg>
       </button>
-      <button id="newTableBtn" title="Create a table (or double-click the canvas)">+ Table</button>
-      <button id="helpBtn">Syntax</button>
+      <div class="vsep sm"></div>
+      <button id="helpBtn" class="help-btn" title="Syntax reference" aria-pressed="false"><span class="q">?</span>Syntax</button>
     </div>
+
     <div class="editor">
       <div class="gutter" id="gutter"></div>
       <div class="code">
         <pre id="hl" aria-hidden="true"></pre>
-        <textarea id="src" spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off"></textarea>
+        <textarea id="src" spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off" aria-label="Diagram source"></textarea>
+      </div>
+
+      <div id="help" hidden>
+        <div class="help-head">
+          <div class="help-title">Syntax reference</div>
+          <div class="spacer"></div>
+          <button id="helpClose" class="btn-outline">Back to editor</button>
+        </div>
+<pre class="help-code"><span class="t-com"># comment</span>
+<span class="t-tbl">Owner</span>                <span class="t-com">← table: no indentation</span>
+  Id                 <span class="t-com">← int, primary key</span>
+  Name               <span class="t-com">← no type = vc (varchar(128))</span>
+  Email <span class="t-type">vc</span> <span class="t-flag">unique</span>
+
+<span class="t-tbl">Dog</span>
+  OwnerId <span class="t-arrow">-&gt; Owner</span>       <span class="t-com">← FK to Owner's PK</span>
+  OwnerMail <span class="t-arrow">-&gt; Owner.Email</span>
+
+<span class="t-tbl">DogToShow</span>            <span class="t-com">← no Id = no PK…</span>
+  DogId <span class="t-flag">pk</span> <span class="t-arrow">-&gt; Dog</span>       <span class="t-com">← …unless you write pk</span></pre>
+        <div class="help-grid">
+          <code class="t-flag">pk</code><div>Primary key. An explicit <b>pk</b> wins over <b>Id</b>.</div>
+          <code class="t-flag">null</code><div>Column may be NULL (default is NOT NULL).</div>
+          <code class="t-flag">unique</code><div>UNIQUE constraint — this is how 1‑1 is made.</div>
+          <code class="t-arrow">-&gt; Table</code><div>Foreign key to that table's primary key. The column inherits its type.</div>
+          <code class="t-arrow">-&gt; T.Col</code><div>Foreign key to a specific (PK or unique) column.</div>
+          <code class="t-type">vc</code><div>varchar(128). Other types as-is: int, text, date, datetime, decimal(8,2)…</div>
+        </div>
+        <div class="hsep"></div>
+        <div class="help-keys">
+          <span>Drag header</span><span>Move a table</span>
+          <span>Drag canvas</span><span>Pan</span>
+          <span>⌘ + scroll</span><span>Zoom</span>
+          <span>Click a row</span><span>Jump to its line</span>
+          <span>Double-click a table</span><span>Edit it in a dialog</span>
+          <span>Hover a table</span><span>Highlight its arrows</span>
+          <span>SQL tab</span><span>Edit as MariaDB; changes convert back to text</span>
+        </div>
       </div>
     </div>
-    <div id="problems"></div>
-    <div id="help" hidden>
-      <h2>Syntax</h2>
-<pre># comment
-Owner                 ← table: no indentation
-  Id                  ← Id is int and the primary key
-  Name                ← no type = vc (varchar(128))
-  Email vc unique
 
-Dog
-  Id
-  Name vc(64)
-  Points decimal(3,1) null
-  OwnerId -> Owner    ← arrow to Owner's primary key (Id)
-  OwnerMail -> Owner.Email  ← arrow to a specific column
-
-DogToShow             ← no Id = no primary key…
-  DogId pk -> Dog     ← …unless you write pk
-  ShowId pk -> Show</pre>
-      <table>
-        <tr><td><code>pk</code></td><td>primary key. An explicit <code>pk</code> wins over <code>Id</code>.</td></tr>
-        <tr><td><code>null</code></td><td>column may be NULL (default is NOT NULL)</td></tr>
-        <tr><td><code>unique</code></td><td>UNIQUE constraint (this is how 1-1 is made)</td></tr>
-        <tr><td><code>-&gt; Table</code></td><td>foreign key to the table's primary key (normally <code>Id</code>). The FK column gets its type.</td></tr>
-        <tr><td><code>-&gt; Table.Col</code></td><td>foreign key to a specific column. It should be the primary key or <code>unique</code>.</td></tr>
-        <tr><td><code>vc</code></td><td>varchar(128). Any other type is written as-is: <code>int</code>, <code>text</code>, <code>date</code>, <code>datetime</code>, <code>decimal(8,2)</code>…</td></tr>
-      </table>
-      <p>Drag boxes to move them. Drag the background to pan, and ⌘/Ctrl + scroll (or pinch) to zoom. Click a row to jump to its line. Hover a row to see its arrows.</p>
-      <p><b>+ Table</b> or double-clicking the canvas creates a table. Double-click a box to edit it. Changes are written into the text.</p>
-      <p>Switch to <b>SQL</b> to see and edit the generated MariaDB code. Edits there are converted back to text.</p>
-      <button id="helpClose">Close</button>
+    <div class="statusbar">
+      <button id="statusBtn" class="status">
+        <span id="statusDot" class="dot"></span>
+        <span id="statusText" class="status-text">No problems</span>
+      </button>
+      <div class="spacer"></div>
+      <span id="summary" class="summary"></span>
     </div>
   </section>
-  <div id="split"></div>
+
+  <div id="split" role="separator" aria-orientation="vertical"><i></i></div>
+
   <section id="right">
     <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
       <style id="diagramCss"></style>
       <defs id="defs"></defs>
       <g id="vp"></g>
     </svg>
-    <div class="tools">
-      <div class="seg" id="styleSeg">
-        <button data-style="classic">Classic</button>
-        <button data-style="green">Green</button>
-      </div>
-      <button id="zoomOut" title="Zoom out">−</button>
-      <button id="zoomIn" title="Zoom in">+</button>
-      <button id="fitBtn">Fit</button>
-      <button id="layoutBtn" title="Rearrange all boxes">Auto layout</button>
-      <button id="svgBtn">SVG</button>
-      <button id="pngBtn">PNG</button>
+
+    <div id="emptyState" class="empty" hidden>
+      <div class="empty-title">No tables yet</div>
+      <div>Type a table name in the editor, or use <b>New table</b>.</div>
     </div>
+
+    <div class="card card-tl">
+      <button id="newTableBtn" class="tool" title="New table (or double-click the canvas)">
+        <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M7 2v10M2 7h10"/></svg>
+        New table
+      </button>
+      <div class="vsep sm"></div>
+      <button id="layoutBtn" class="tool" title="Rearrange all tables">
+        <svg width="14" height="14" class="ico thin" aria-hidden="true"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="8" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1"/><rect x="8" y="8" width="4.5" height="4.5" rx="1"/></svg>
+        Auto layout
+      </button>
+    </div>
+
+    <div class="card card-tr" id="styleSeg">
+      <button class="tool style-tab" data-style="classic"><span class="swatch classic"></span>Classic</button>
+      <button class="tool style-tab" data-style="filled"><span class="swatch filled"></span>Filled</button>
+    </div>
+
+    <div class="card card-br">
+      <button id="zoomOut" class="tool icon" title="Zoom out" aria-label="Zoom out">
+        <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M2.5 7h9"/></svg>
+      </button>
+      <button id="zoomLabel" class="tool zoom-label" title="Reset to 100%">100%</button>
+      <button id="zoomIn" class="tool icon" title="Zoom in" aria-label="Zoom in">
+        <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M7 2.5v9M2.5 7h9"/></svg>
+      </button>
+      <div class="vsep sm"></div>
+      <button id="fitBtn" class="tool" title="Fit diagram to view">
+        <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M1.5 5V1.5H5M9 1.5h3.5V5M12.5 9v3.5H9M5 12.5H1.5V9"/></svg>
+        Fit
+      </button>
+    </div>
+
+    <div id="toast" hidden><span id="toastMsg"></span><button id="toastAct"></button></div>
   </section>
 </main>
+
 <div id="tableDlg" class="dlg-backdrop" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="tdTitle">
     <h2 id="tdTitle">New table</h2>
@@ -118,18 +189,17 @@ DogToShow             ← no Id = no primary key…
       <span>Column</span><span>Type</span><span title="Primary key">PK</span><span title="May be NULL">Null</span><span>Unique</span><span>Foreign key</span><span></span>
     </div>
     <div id="tdCols"></div>
-    <button id="tdAdd">+ Add column</button>
+    <button id="tdAdd" class="btn-outline">+ Add column</button>
     <div id="tdError" class="dlg-error"></div>
     <div class="dlg-actions">
-      <button id="tdDelete" class="danger">Delete table</button>
+      <button id="tdDelete" class="btn-outline danger">Delete table</button>
       <span class="spacer"></span>
-      <button id="tdCancel">Cancel</button>
-      <button id="tdSave" class="primary">Save</button>
+      <button id="tdCancel" class="btn-outline">Cancel</button>
+      <button id="tdSave" class="btn-primary">Save</button>
     </div>
   </div>
 </div>
 <datalist id="typeList"></datalist>
-<div id="toast" hidden><span id="toastMsg"></span><button id="toastAct"></button></div>
 
 <script src="js/examples.js"></script>
 <script src="js/model.js"></script>

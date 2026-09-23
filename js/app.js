@@ -2,7 +2,7 @@
 
 // ─── Editor ──────────────────────────────────────────────────────────────────
 
-const ta = $('#src'), hl = $('#hl'), gutter = $('#gutter'), problemsEl = $('#problems');
+const ta = $('#src'), hl = $('#hl'), gutter = $('#gutter');
 
 function hlTextLine(line) {
   const hash = line.indexOf('#');
@@ -55,10 +55,28 @@ function decorateEditor(problems) {
     const p = byLine.get(i + 1);
     return p ? `<div class="${p.level}" title="${esc(p.msg)}">${i + 1}</div>` : `<div>${i + 1}</div>`;
   }).join('');
-  problemsEl.innerHTML = [...problems].sort((a, b) => (a.line ?? 0) - (b.line ?? 0)).map(p =>
-    `<div class="prob ${p.level}" data-line="${p.line ?? ''}"><b>${p.line ? 'Line ' + p.line : p.level}</b><span>${esc(p.msg)}</span></div>`).join('');
+  updateStatus(problems);
   syncScroll();
 }
+
+// Status bar: the first problem (click to jump there), and the diagram's size
+let firstProblem = null;
+function updateStatus(problems) {
+  const sorted = [...problems].sort((a, b) => (a.line ?? 0) - (b.line ?? 0) || (a.level === 'error' ? -1 : 1));
+  firstProblem = sorted[0] ?? null;
+  const btn = $('#statusBtn'), n = problems.length;
+  btn.classList.toggle('has-problems', n > 0);
+  btn.classList.toggle('error', problems.some(p => p.level === 'error'));
+  btn.classList.toggle('warn', n > 0 && !problems.some(p => p.level === 'error'));
+  $('#statusText').textContent = !n
+    ? (state.mode === 'sql' ? 'MariaDB · No problems' : 'No problems')
+    : `${n} problem${n > 1 ? 's' : ''} · ${firstProblem.line ? 'Line ' + firstProblem.line + ': ' : ''}${firstProblem.msg}`;
+  $('#statusText').title = n ? sorted.map(p => (p.line ? `Line ${p.line}: ` : '') + p.msg).join('\n') : '';
+  const tables = model.tables ?? [];
+  const rels = tables.reduce((k, t) => k + t.cols.filter(c => c.target).length, 0);
+  $('#summary').textContent = `${tables.length} table${tables.length === 1 ? '' : 's'} · ${rels} relation${rels === 1 ? '' : 's'}`;
+}
+$('#statusBtn').onclick = () => { if (firstProblem?.line) selectLine(firstProblem.line); };
 
 function syncScroll() {
   hl.scrollTop = ta.scrollTop;
@@ -67,6 +85,7 @@ function syncScroll() {
 }
 
 function selectLine(n) {
+  setHelp(false);
   const lines = ta.value.split('\n');
   if (!n || n > lines.length) return;
   let start = 0;
@@ -107,10 +126,6 @@ ta.addEventListener('input', () => {
   else { state.sql = ta.value; state.textStale = true; }
   update();
   saveState();
-});
-problemsEl.addEventListener('click', e => {
-  const el = e.target.closest('.prob');
-  if (el && el.dataset.line) selectLine(+el.dataset.line);
 });
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -200,7 +215,7 @@ $('#themeBtn').addEventListener('click', () => {
   applyTheme(theme);
 });
 
-// ─── Examples, help, splitter, toast ─────────────────────────────────────────
+// ─── Toast, examples, help, export menu, splitter ────────────────────────────
 
 let toastTimer = 0;
 function toast(msg, actLabel, act) {
@@ -211,11 +226,11 @@ function toast(msg, actLabel, act) {
   b.onclick = () => { act(); $('#toast').hidden = true; };
   $('#toast').hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 7000);
+  toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 5000);
 }
 
 $('#examples').addEventListener('change', e => {
-  const key = e.target.value;
+  const key = e.target.value, label = e.target.selectedOptions[0].textContent;
   e.target.selectedIndex = 0;
   histRecord('example', () => {
     state.text = EXAMPLES[key];
@@ -227,21 +242,71 @@ $('#examples').addEventListener('change', e => {
     for (const t of r.tables) delete pos[t.name];
     loadEditor();
   });
+  setHelp(false);
   fit();
   saveState();
-  toast('Example loaded', 'Undo', () => { histUndo(); fit(); });
+  toast(`Loaded “${label}”`, 'Undo', () => { histUndo(); fit(); });
 });
 
-$('#helpBtn').onclick = () => { $('#help').hidden = !$('#help').hidden; };
-$('#helpClose').onclick = () => { $('#help').hidden = true; };
+function setHelp(open) {
+  $('#help').hidden = !open;
+  $('#helpBtn').classList.toggle('on', open);
+  $('#helpBtn').setAttribute('aria-pressed', open);
+}
+$('#helpBtn').onclick = () => setHelp($('#help').hidden);
+$('#helpClose').onclick = () => setHelp(false);
 
+// Export menu: Diagram (SVG, PNG) and Schema (.sql file, copy to clipboard)
+function closeMenus() {
+  $('#exportMenu').hidden = true;
+  $('#exportBtn').setAttribute('aria-expanded', 'false');
+}
+$('#exportBtn').onclick = e => {
+  e.stopPropagation();
+  const open = $('#exportMenu').hidden;
+  $('#exportMenu').hidden = !open;
+  $('#exportBtn').setAttribute('aria-expanded', String(open));
+};
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu-wrap')) closeMenus(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
+
+// The schema as MariaDB: the SQL as edited, or generated from the text
+function currentSql() {
+  if (!state.sqlStale) return state.sql;
+  const r = parseText(state.text);
+  resolve(r.tables);
+  return genSQL(r.tables);
+}
+async function copySql() {
+  closeMenus();
+  try {
+    await navigator.clipboard.writeText(currentSql());
+    toast('SQL copied to clipboard');
+  } catch {
+    toast('Could not copy. Use Export → MariaDB script instead.');
+  }
+}
+$('#svgBtn').onclick = () => { closeMenus(); exportSvg(); };
+$('#pngBtn').onclick = () => { closeMenus(); exportPng(); };
+$('#sqlBtn').onclick = () => {
+  closeMenus();
+  download(new Blob([currentSql()], { type: 'text/sql' }), 'schema.sql');
+  toast('Saved schema.sql');
+};
+$('#copySqlBtn').onclick = copySql;
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') { e.preventDefault(); copySql(); }
+});
+
+// Splitter between editor and canvas (editor ≥ 300px, canvas ≥ 380px)
 const left = $('#left'), split = $('#split');
-if (state.leftW) left.style.width = state.leftW + 'px';
+const clampLeft = w => Math.max(300, Math.min(window.innerWidth - 380, w));
+if (state.leftW) left.style.width = clampLeft(state.leftW) + 'px';
 split.addEventListener('pointerdown', e => {
   split.setPointerCapture(e.pointerId);
   split.classList.add('active');
   const move = ev => {
-    state.leftW = Math.max(280, Math.min(window.innerWidth - 300, ev.clientX));
+    state.leftW = clampLeft(ev.clientX);
     left.style.width = state.leftW + 'px';
   };
   const up = () => {
@@ -255,7 +320,14 @@ split.addEventListener('pointerdown', e => {
 });
 
 // ─── Start ───────────────────────────────────────────────────────────────────
+// Box widths are measured with the Geist fonts, so wait for them (at most 1.5s).
 
 applyStyle();
-loadEditor();
-fit();
+const fontsLoaded = Promise.all(Object.values(FONTS).map(f => document.fonts.load(f)));
+Promise.race([fontsLoaded, new Promise(r => setTimeout(r, 1500))]).then(() => {
+  widthCache.clear();
+  loadEditor();
+  fit();
+});
+// fonts that arrive late: measure again
+fontsLoaded.then(() => { widthCache.clear(); if (model.tables) drawDiagram(); });

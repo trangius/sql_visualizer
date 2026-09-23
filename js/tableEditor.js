@@ -213,8 +213,8 @@ function fkPanelMarkup() {
         <div class="fk-foot">
           <span id="fkPreview"></span>
           <span class="spacer"></span>
-          <button data-act="fk-cancel">Cancel</button>
-          <button data-act="fk-ok" id="fkOk" class="primary">OK</button>
+          <button data-act="fk-cancel" class="btn-outline">Cancel</button>
+          <button data-act="fk-ok" id="fkOk" class="btn-primary">OK</button>
         </div>
       </div>
     </div>`;
