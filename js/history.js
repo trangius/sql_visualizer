@@ -106,6 +106,7 @@ function histUndo() { histStep(-1); }
 function histRedo() { histStep(1); }
 
 function histStep(dir) {
+  setHelp(false); // show the editor, so the change is visible
   histCommit(); // finish a typing burst first, so it can be undone
   const from = dir < 0 ? hist.undo : hist.redo, to = dir < 0 ? hist.redo : hist.undo;
   const top = () => from[from.length - 1];
@@ -124,7 +125,7 @@ function histStep(dir) {
 function refreshAfterHistory(e, dir) {
   const top = ta.scrollTop;
   ta.value = state.mode === 'text' ? state.text : state.sql;
-  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === state.mode));
+  updateModeSeg();
   update();
   ta.scrollTop = top;
   const d = e[state.mode];

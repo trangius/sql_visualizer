@@ -264,11 +264,16 @@ function setMode(mode) {
 function loadEditor() {
   ta.value = state.mode === 'text' ? state.text : state.sql;
   ta.scrollTop = 0;
-  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === state.mode));
+  updateModeSeg();
   update();
 }
 
-$('#modeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); });
+$('#modeSeg').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  setHelp(false); // back from the syntax reference, into the chosen view
+  setMode(b.dataset.mode);
+});
 
 // ─── Theme ───────────────────────────────────────────────────────────────────
 // Follows the system until the user clicks the toggle. Toggling back to what the
@@ -313,10 +318,17 @@ $('#examples').addEventListener('change', e => {
   newDoc(label, EXAMPLES[key]);
 });
 
+// The syntax reference is a third view of the editor area, beside Simple and SQL:
+// while it's open neither of those is highlighted, and choosing one closes it.
 function setHelp(open) {
   $('#help').hidden = !open;
   $('#helpBtn').classList.toggle('on', open);
   $('#helpBtn').setAttribute('aria-pressed', open);
+  updateModeSeg();
+}
+function updateModeSeg() {
+  const helpOpen = !$('#help').hidden;
+  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', !helpOpen && b.dataset.mode === state.mode));
 }
 $('#helpBtn').onclick = () => setHelp($('#help').hidden);
 $('#helpClose').onclick = () => setHelp(false);
