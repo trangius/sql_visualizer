@@ -6,12 +6,13 @@
 // The keys are the token colours from the design:
 //   tbl: table names   type: types   flag: pk/null/unique and SQL keywords
 //   arrow: "->" and SQL strings   ref: what an arrow points to, FK badges   com: comments
-// Bleak is the site's own palette (onedarkbleak.nvim), the same values as in style.css.
+// Bleak is the site's own palette (onedarkbleak.nvim), the same values as in style.css
+// (light: a bit more saturated than the original, which read as almost grey).
 
 const COLOR_SCHEMES = {
   bleak: {
     name: 'Bleak',
-    light: { tbl: '#7e5414', type: '#3a4658', flag: '#6e3a2e', arrow: '#525e1e', ref: '#525e1e', com: '#8a7e60' },
+    light: { tbl: '#a25a00', type: '#2b5c94', flag: '#b0392a', arrow: '#4a7d12', ref: '#4a7d12', com: '#8a7e60' },
     dark: { tbl: '#c8a878', type: '#8ab1c8', flag: '#d4a8a0', arrow: '#a8c896', ref: '#a8c896', com: '#6e6f72' },
   },
   github: {

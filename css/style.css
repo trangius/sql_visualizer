@@ -20,11 +20,11 @@
   --sel: rgba(58, 70, 88, .18);
   --shadow: 0 1px 2px rgba(60, 40, 10, .06), 0 4px 14px rgba(60, 40, 10, .06);
   --box-shadow: drop-shadow(0 1px 1px rgba(60, 40, 10, .06)) drop-shadow(0 4px 7px rgba(60, 40, 10, .06));
-  --tok-tbl: #7e5414;
-  --tok-type: #3a4658;
-  --tok-flag: #6e3a2e;
-  --tok-arrow: #525e1e;
-  --tok-ref: #525e1e;
+  --tok-tbl: #a25a00;
+  --tok-type: #2b5c94;
+  --tok-flag: #b0392a;
+  --tok-arrow: #4a7d12;
+  --tok-ref: #4a7d12;
   --tok-com: #8a7e60;
   --edge: #5e5440;
   --box-bg: #fffcf5;
