@@ -189,9 +189,34 @@
       </button>
     </div>
 
-    <div class="card card-tr" id="styleSeg">
-      <button class="tool style-tab" data-style="classic"><span class="swatch classic"></span>Classic</button>
-      <button class="tool style-tab" data-style="filled"><span class="swatch filled"></span>Filled</button>
+    <div class="card card-tr">
+      <select id="notationSel" class="select sm" title="Relationship notation" aria-label="Relationship notation">
+        <option value="arrows">Arrows (SQL)</option>
+        <option value="crowsfoot">Crow's foot</option>
+        <option value="uml">UML</option>
+        <option value="ratio">1 : N</option>
+      </select>
+      <div class="vsep sm"></div>
+      <div id="styleSeg" class="style-seg">
+        <button class="tool style-tab" data-style="classic"><span class="swatch classic"></span>Classic</button>
+        <button class="tool style-tab" data-style="filled"><span class="swatch filled"></span>Filled</button>
+      </div>
+    </div>
+
+    <div id="notationNote" class="note" role="dialog" aria-labelledby="noteTitle" hidden>
+      <div class="note-title" id="noteTitle">This is an ER-style notation</div>
+      <p>ER diagrams model any kind of system, before anyone has decided how it will be stored. That is why ER has 1‑1, 1‑N and N‑N relationships.</p>
+      <p>A SQL database is more concrete. It has tables with columns, and a foreign key is a column that points to a column in another table. Between two tables that is <b>always 1‑N</b>: many rows can hold the same key, and each of them points to exactly one row.</p>
+      <ul>
+        <li><b>N‑N</b> doesn't exist between two tables. It is always built as a junction table with two foreign keys.</li>
+        <li><b>1‑1</b> is usually just columns in the same table, or a foreign key marked <code>unique</code> (drawn here as 1‑1).</li>
+      </ul>
+      <p><b>Why it's everywhere:</b> ER notation comes from 1970s design methods: Chen's ER model, and crow's feet from Information Engineering. The database design tools of the 80s and 90s kept those symbols when they started drawing real tables, and still call the result an "ER diagram". Textbooks and tutorials copied them, so that is what a web search shows.</p>
+      <p>The arrows show exactly which column points to which, and that is what you need to write a JOIN. ER symbols only tell you that two tables are related.</p>
+      <div class="note-actions">
+        <button id="noteSwitch" class="btn-outline">Switch anyway</button>
+        <button id="noteStay" class="btn-primary">Stay with arrows</button>
+      </div>
     </div>
 
     <div class="card card-br">

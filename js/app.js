@@ -133,7 +133,7 @@ ta.addEventListener('input', () => {
 // ─── State ───────────────────────────────────────────────────────────────────
 
 const state = Object.assign({
-  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', colors: 'bleak', fontSize: 13, panel: 'mid', leftW: null,
+  mode: 'text', text: EXAMPLES.school, sql: '', textStale: false, sqlStale: true, style: 'classic', colors: 'bleak', fontSize: 13, notation: 'arrows', panel: 'mid', leftW: null,
 }, store.get('state', {}));
 let pos = store.get('pos', {});
 let model = { tables: [] };
@@ -256,6 +256,44 @@ function setHelp(open) {
 }
 $('#helpBtn').onclick = () => setHelp($('#help').hidden);
 $('#helpClose').onclick = () => setHelp(false);
+
+// Relationship notation. Going from arrows to an ER-style notation first shows why it
+// doesn't fit SQL tables; nothing changes until "Switch to …" is chosen.
+let pendingNotation = null;
+function applyNotation() {
+  if (!NOTATIONS[state.notation]) state.notation = 'arrows';
+  $('#notationSel').value = state.notation;
+  $('#notationSel').classList.toggle('er', state.notation !== 'arrows');
+  $('#notationSel').title = state.notation === 'arrows' ? 'Relationship notation' : 'An ER-style notation: see why arrows fit SQL tables better';
+  if (model.tables?.length) drawDiagram();
+}
+function closeNote() {
+  pendingNotation = null;
+  $('#notationNote').hidden = true;
+}
+function setNotation(n) {
+  state.notation = n;
+  applyNotation();
+  saveState();
+}
+$('#notationSel').addEventListener('change', e => {
+  const n = e.target.value;
+  if (state.notation === 'arrows' && n !== 'arrows') {
+    // stay on arrows until the user confirms; the same note for every ER-style notation
+    pendingNotation = n;
+    e.target.value = 'arrows';
+    $('#noteSwitch').textContent = `Switch to ${NOTATIONS[n]}`;
+    $('#notationNote').hidden = false;
+    $('#noteStay').focus();
+  } else {
+    closeNote();
+    setNotation(n);
+  }
+});
+$('#noteSwitch').onclick = () => { const n = pendingNotation; closeNote(); if (n) setNotation(n); };
+$('#noteStay').onclick = closeNote;
+$('#notationNote').addEventListener('keydown', e => { if (e.key === 'Escape') closeNote(); });
+applyNotation();
 
 // Menus: Export (app bar) and Text colours (editor header)
 const MENUS = [['#exportBtn', '#exportMenu'], ['#schemeBtn', '#schemeMenu']];

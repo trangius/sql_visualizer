@@ -326,6 +326,11 @@ text { dominant-baseline: central; }
 .edge-g.hl .edge { stroke: var(--accent, #3a4658); stroke-width: 2; }
 .edge-g.hl .ahead { fill: var(--accent, #3a4658); }
 .edge-g.hl .start { stroke: var(--accent, #3a4658); }
+.sym { fill: none; stroke: var(--edge, #5e5440); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.sym-o { fill: var(--canvas, #fff); stroke: var(--edge, #5e5440); stroke-width: 1.4; }
+.mult { font: 500 11px ${MONO_FONT}; fill: var(--muted, #5e5440); dominant-baseline: auto; }
+.edge-g.hl .sym, .edge-g.hl .sym-o { stroke: var(--accent, #3a4658); stroke-width: 2; }
+.edge-g.hl .mult { fill: var(--accent, #3a4658); font-weight: 600; }
 .edge-hit { fill: none; stroke: transparent; stroke-width: 9; }
 .style-filled { --box-head: var(--accent, #3a4658); --box-head-fg: var(--accent-fg, #faf6ee); --box-border: var(--accent, #3a4658); }
 `;
@@ -351,6 +356,10 @@ function computeGeometry() {
       edges.push({
         a, b,
         fromTable: t.name, toTable: c.target.name,
+        // what the schema guarantees: a unique FK (or one that is the whole PK) makes it 1-1,
+        // a nullable FK means a row may have no parent
+        unique: c.unique || (c.isPk && t.pkCols.length === 1),
+        nullable: c.nullable,
         from: t.name + '.' + c.name,
         to: c.target.name + '.' + c.targetCol.name,
         sy: a.y + rowY(i),
@@ -358,7 +367,24 @@ function computeGeometry() {
       });
     });
   }
+  // In the ER notations each arrow's "one" end has its own symbol, so arrows that point
+  // at the same row are spread a little apart instead of meeting in one point
+  if (state.notation !== 'arrows') {
+    const byTarget = new Map();
+    for (const e of edges) (byTarget.get(e.to) ?? byTarget.set(e.to, []).get(e.to)).push(e);
+    for (const group of byTarget.values()) {
+      if (group.length < 2) continue;
+      const step = Math.min(8, 22 / (group.length - 1));
+      group.sort((p, q) => p.sy - q.sy);
+      group.forEach((e, i) => {
+        const off = (i - (group.length - 1) / 2) * step;
+        e.ty += off;
+        e.small = true;
+      });
+    }
+  }
   routeEdges(edges, [...boxes.values()]);
+  if (state.notation === 'uml' || state.notation === 'ratio') placeLabels(edges);
   geometry = { boxes, edges, dims };
 }
 
@@ -389,14 +415,84 @@ function boxMarkup(t, b, interactive) {
 }
 
 // An arrow: rounded path, a hollow circle at the FK row, a filled 9×9 arrowhead at the target
+// Notations. Every one connects the FK row to the referenced row; they differ only in
+// what is drawn at the two ends. The FK end is the "many" side, the referenced end the "one".
+const NOTATIONS = {
+  arrows: 'Arrows (SQL)',
+  crowsfoot: "Crow's foot",
+  uml: 'UML',
+  ratio: '1 : N',
+};
+
+// Crow's foot symbols at an end: x,y on the box edge, d = direction away from the box,
+// h = half height (smaller when several arrows end on the same row)
+const crowOne = (x, y, d, h) => `M${x + 6 * d},${y - h}V${y + h}M${x + 10 * d},${y - h}V${y + h}`;       // ||  exactly one
+const crowZeroOne = (x, y, d, h) => `M${x + 7 * d},${y - h}V${y + h}`;                                     // o|  (ring added below)
+const crowMany = (x, y, d, h) => `M${x},${y - h}L${x + 10 * d},${y}L${x},${y + h}`;                       // <   (ring added below)
+const ring = (x, y, d, h) => `<circle class="sym-o" cx="${x + 15 * d}" cy="${y}" r="${h > 4 ? 3.5 : 2.5}"/>`;
+
+// UML / 1 : N labels. Each end's label tries above and below its line (then a bit
+// further out) and takes the first spot that touches no line and no other label.
+function labelTexts(e) {
+  return state.notation === 'uml'
+    ? [e.nullable ? '0..1' : '1', e.unique ? '0..1' : '*']      // referenced end, FK end
+    : ['1', e.unique ? '1' : 'N'];
+}
+function placeLabels(edges) {
+  const CHAR_W = 6.8, H = 11;
+  const segs = edges.flatMap(e => e.points.slice(1).map((p, i) => [e.points[i], p]));
+  const hitsSeg = r => segs.some(([[x1, y1], [x2, y2]]) =>
+    Math.max(x1, x2) >= r.x && Math.min(x1, x2) <= r.x + r.w && Math.max(y1, y2) >= r.y && Math.min(y1, y2) <= r.y + r.h);
+  const taken = [];
+  const overlaps = r => taken.some(q => r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y);
+  for (const e of edges) {
+    const pts = e.points, n = pts.length;
+    const [target, fk] = labelTexts(e);
+    e.labels = [[pts[n - 1], pts[n - 2], target], [pts[0], pts[1], fk]].map(([[x, y], [nx], text]) => {
+      const d = Math.sign(nx - x) || 1, w = text.length * CHAR_W;
+      const spot = (dx, above) => {
+        const lx = x + dx * d, ly = above ? y - 8 : y + 15;
+        return { x: lx, y: ly, anchor: d > 0 ? 'start' : 'end', text, box: { x: d > 0 ? lx : lx - w, y: ly - H + 2, w, h: H } };
+      };
+      const tries = [spot(9, true), spot(9, false), spot(24, true), spot(24, false)];
+      const l = tries.find(t => !hitsSeg(t.box) && !overlaps(t.box)) ?? tries.find(t => !overlaps(t.box)) ?? tries[0];
+      taken.push(l.box);
+      return l;
+    });
+  }
+}
+
+function endMarks(e) {
+  const pts = e.points, n = pts.length;
+  const [sx, sy] = pts[0], [tx, ty] = pts[n - 1];
+  const sd = Math.sign(pts[1][0] - sx) || 1, td = Math.sign(pts[n - 2][0] - tx) || -1;
+  const labels = () => e.labels.map(l =>
+    `<text class="mult" x="${l.x}" y="${l.y}" text-anchor="${l.anchor}">${l.text}</text>`).join('');
+  switch (state.notation) {
+    case 'crowsfoot': {
+      const th = e.small ? 3.5 : 6;
+      // referenced end: exactly one, or zero-or-one when the FK may be NULL
+      let s = `<path class="sym" d="${e.nullable ? crowZeroOne(tx, ty, td, th) : crowOne(tx, ty, td, th)}"/>`;
+      if (e.nullable) s += ring(tx, ty, td, th);
+      // FK end: zero-or-many, or zero-or-one when the FK is unique (1-1)
+      s += `<path class="sym" d="${e.unique ? crowZeroOne(sx, sy, sd, 6) : crowMany(sx, sy, sd, 6)}"/>` + ring(sx, sy, sd, 6);
+      return s;
+    }
+    case 'uml':
+      return labels();
+    case 'ratio':
+      return labels();
+    default: { // arrows: a hollow circle at the FK row, an arrowhead at the referenced row
+      return `<path class="ahead" d="M${tx},${ty}L${tx + 9 * td},${ty - 4.5}L${tx + 9 * td},${ty + 4.5}Z"/>` +
+        `<circle class="start" cx="${sx}" cy="${sy}" r="3"/>`;
+    }
+  }
+}
+
 function edgeMarkup(e, interactive) {
-  const pts = e.points, [ex, ey] = pts[pts.length - 1], [px] = pts[pts.length - 2];
-  const dir = ex >= px ? 1 : -1;
   let s = `<g class="edge-g" data-from="${esc(e.from)}" data-to="${esc(e.to)}" data-ft="${esc(e.fromTable)}" data-tt="${esc(e.toTable)}">`;
   if (interactive) s += `<path class="edge-hit" d="${e.d}"/>`;
-  s += `<path class="edge" d="${e.d}"/>`;
-  s += `<path class="ahead" d="M${ex},${ey}L${ex - 9 * dir},${ey - 4.5}L${ex - 9 * dir},${ey + 4.5}Z"/>`;
-  s += `<circle class="start" cx="${pts[0][0]}" cy="${pts[0][1]}" r="3"/></g>`;
+  s += `<path class="edge" d="${e.d}"/>` + endMarks(e) + '</g>';
   return s;
 }
 
