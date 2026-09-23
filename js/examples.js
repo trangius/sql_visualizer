@@ -3,7 +3,7 @@
 // ─── Examples ────────────────────────────────────────────────────────────────
 
 const EXAMPLES = {
-  school: `# Skoldatabasen (schooldb)
+  school: `# School database
 Student
   Id
   Name vc(100)
@@ -21,7 +21,7 @@ Course
   Credits int
   TeacherId -> Teacher
 
-# Enrollment: the junction table between Student and Course
+# Junction table: Student ↔ Course
 Enrollment
   Id
   StudentId -> Student
@@ -30,8 +30,10 @@ Enrollment
   Grade int  # 0 = IG, 1 = G, 2 = VG
 `,
   tour: `# Tables: a name without indentation
-# Columns: indented, "Name type flags -> Table"
-# No type means vc (varchar(128)). Id is int and the primary key.
+# Columns: indented, like
+#   Name type flags -> Table
+# No type means vc (varchar(128)).
+# Id is int and the primary key.
 
 Author
   Id
@@ -46,7 +48,8 @@ Book
   AuthorId -> Author
   SequelToId null -> Book
 
-# No Id means no primary key, unless you write pk
+# No Id means no primary key,
+# unless you write pk
 BookTag
   BookId pk -> Book
   Tag vc(32) pk
@@ -181,7 +184,5 @@ Return
   ReturnStatusId -> ReturnStatus
   Reason text
   HandlerNote text
-`,
-  empty: `# Write a table name, then indented columns:
 `,
 };

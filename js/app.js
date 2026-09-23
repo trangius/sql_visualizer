@@ -164,7 +164,7 @@ const SETTINGS = ['style', 'colors', 'fontSize', 'wrap', 'notation', 'panel', 'l
 const DOC_DEFAULTS = { text: '', sql: '', mode: 'text', textStale: false, sqlStale: true, base: null };
 const docKey = id => 'doc.' + id;
 const newDocId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-// a new diagram is named after its first comment line ("# Skoldatabasen (schooldb)")
+// a new diagram is named after its first comment line ("# School database")
 const docNameFrom = text => (text.match(/^#\s*(.+)$/m)?.[1].trim().slice(0, 40)) || 'Untitled';
 
 let docs = store.get('docs', null);

@@ -782,7 +782,7 @@ function download(blob, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-// files are named after the tab: "Skoldatabasen (schooldb)" → skoldatabasen-schooldb.svg
+// files are named after the tab: "School database" → school-database.svg
 const exportName = ext => ((activeDoc()?.name ?? 'diagram').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'diagram') + '.' + ext;
 
 async function exportSvg() {
