@@ -17,7 +17,6 @@ let dlg = null;
 
 const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, ref: null, refCol: null, comment: '' });
 const inlineComment = line => { const i = (line ?? '').indexOf('#'); return i >= 0 ? line.slice(i).trim() : ''; };
-const snap = v => Math.round(v / 10) * 10;
 const lc = s => s.toLowerCase();
 const pointsToPk = c => c.target.pkCols.length === 1 && c.target.pkCols[0] === c.targetCol;
 
@@ -385,7 +384,9 @@ function saveTable() {
     if (lines.length) lines.push('');
     at = lines.length + 1;
     lines.push(...block, '');
-    pos[name] = dlg.at ?? viewCenterSpot();
+    // double-click on the canvas: exactly there; otherwise the layout picks the best spot
+    if (dlg.at) pos[name] = { ...dlg.at };
+    else delete pos[name];
   }
   store.set('pos', pos);
   closeTableEditor();
@@ -446,12 +447,6 @@ function commitText(text, line) {
     update();
     saveState();
   }
-}
-
-function viewCenterSpot() {
-  const r = svg.getBoundingClientRect();
-  const w = toWorld({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
-  return { x: snap(w.x - 80), y: snap(w.y - 60) };
 }
 
 // ─── Wiring ──────────────────────────────────────────────────────────────────

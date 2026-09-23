@@ -28,78 +28,51 @@ function measureTable(t) {
 }
 const rowY = i => HEAD_H + TOP_PAD + i * ROW_H + ROW_H / 2;
 
-// Referenced tables to the left, referencing tables to the right (one column per FK depth)
-function autoLayout(tables, dims, only) {
-  const memo = new Map();
-  const level = (t, stack = new Set()) => {
-    if (memo.has(t)) return memo.get(t);
-    if (stack.has(t)) return 0;
-    stack.add(t);
-    let l = 0;
-    for (const c of t.cols) if (c.target && c.target !== t) l = Math.max(l, 1 + level(c.target, stack));
-    stack.delete(t);
-    memo.set(t, l);
-    return l;
-  };
-  const cols = [];
-  for (const t of tables) (cols[level(t)] ??= []).push(t);
-  const centerY = new Map();
-  let x = 40;
-  for (const col of cols) {
-    if (!col) continue;
-    const bary = t => {
-      const ys = t.cols.filter(c => c.target && centerY.has(c.target)).map(c => centerY.get(c.target));
-      return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : Infinity;
-    };
-    col.sort((a, b) => bary(a) - bary(b));
-    let y = 40, colW = 0;
-    for (const t of col) {
-      const d = dims.get(t);
-      if (!only || only.has(t.name)) pos[t.name] = { x, y };
-      centerY.set(t, y + d.h / 2);
-      y += d.h + 50;
-      colW = Math.max(colW, d.w);
-    }
-    x += colW + 120;
-  }
-}
+// Positions for tables that don't have one yet (see layout.js for how a spot is chosen).
+// The newest auto-placed table "floats": until it is dragged or another table is added,
+// it moves to a better spot whenever its arrows change (e.g. while its FKs are being typed).
+let revealName = null;
 
 function ensurePositions(tables, dims) {
   const names = new Set(tables.map(t => t.name));
-  const missing = tables.filter(t => !pos[t.name]);
-  if (!missing.length) { prevNames = [...names]; return; }
-  if (missing.length === tables.length) {
-    autoLayout(tables, dims);
+  let changed = false;
+  if (tables.length && !tables.some(t => pos[t.name])) {
+    arrangeAll(tables, dims);
+    changed = true;
   } else {
     // a renamed table keeps the spot of the name it replaced
-    let placedRight = 0;
-    const known = tables.filter(t => pos[t.name]);
-    const right = Math.max(...known.map(t => pos[t.name].x + dims.get(t).w));
-    const top = Math.min(...known.map(t => pos[t.name].y));
-    for (const t of missing) {
-      const idx = tables.indexOf(t);
-      const old = prevNames[idx];
-      if (old && !names.has(old) && pos[old]) pos[t.name] = { ...pos[old] };
-      else {
-        pos[t.name] = { x: Math.round((right + 80) / 10) * 10, y: top + placedRight };
-        placedRight += dims.get(t).h + 30;
-      }
+    tables.forEach((t, i) => {
+      const old = prevNames[i];
+      if (!pos[t.name] && old && !names.has(old) && pos[old]) { pos[t.name] = pos[old]; changed = true; }
+    });
+    const edges = layoutEdges(tables);
+    for (const t of tables) {
+      const p = pos[t.name], sig = linkSignature(t, tables);
+      if (p && !(p.float && p.sig !== sig)) continue;
+      if (!p) for (const q of Object.values(pos)) delete q.float; // only the newest one floats
+      const placed = new Map(tables.filter(o => o !== t && pos[o.name]).map(o => [o, { ...pos[o.name], ...dims.get(o) }]));
+      const s = bestSpot(t, placed, dims, edges, viewCenter());
+      pos[t.name] = { x: s.x, y: s.y, float: true, sig };
+      revealName = t.name;
+      changed = true;
     }
   }
   prevNames = [...names];
-  store.set('pos', pos);
+  if (changed) store.set('pos', pos);
 }
 
 // Arrows leave the FK row horizontally and enter the Id row horizontally.
 // In between they are routed orthogonally around the boxes (A* on a grid),
 // with a cost for every bend. An arrow may never run through another arrow's end point, and running
 // along a lane used by an arrow to a *different* Id is very expensive (it would look like it points there).
-const ROUTE = { GAP: 30, MARGIN: 10, STUB: 20, GRID: 10, BEND: 40, SHARE_OTHER: 60 };
+const ROUTE = { GAP: 30, MARGIN: 10, STUB: 20, GRID: 10, BEND: 40, SHARE_OTHER: 60, CROSS: 30 };
 
-function chooseSides(e) {
+// side: force a same-side loop ('L' or 'R'); used to try both sides of a self-reference
+function chooseSides(e, side = null) {
   const a = e.a, b = e.b;
   let out, inn; // side of a the arrow leaves from, side of b it enters
-  if (a !== b && b.x >= a.x + a.w + ROUTE.GAP) { out = 'R'; inn = 'L'; }
+  if (side) { out = inn = side; }
+  else if (a !== b && b.x >= a.x + a.w + ROUTE.GAP) { out = 'R'; inn = 'L'; }
   else if (a !== b && b.x + b.w <= a.x - ROUTE.GAP) { out = 'L'; inn = 'R'; }
   else {
     // boxes overlap horizontally: leave and enter on the same side
@@ -121,8 +94,16 @@ function simplePath(e) {
 
 function routeEdges(edges, boxes) {
   if (!edges.length) return;
-  edges.forEach(chooseSides);
-  const { MARGIN, GRID, BEND, SHARE_OTHER } = ROUTE;
+  edges.forEach(e => chooseSides(e));
+  const { MARGIN, GRID, BEND, SHARE_OTHER, CROSS } = ROUTE;
+  // a self-reference can loop around either side: both are tried, the cheaper one wins
+  const SIDE_KEYS = ['x1', 'x2', 'outDir', 'inDir', 'sx', 'tx'];
+  const variants = e => e.a !== e.b ? [e] : ['L', 'R'].map(side => {
+    const v = { ...e };
+    chooseSides(v, side);
+    return v;
+  });
+  const allVariants = edges.flatMap(variants);
 
   // Grid lines: every GRID px, plus the exact stub and row coordinates
   const pad = 80;
@@ -135,7 +116,7 @@ function routeEdges(edges, boxes) {
     for (let v = Math.floor(lo / step) * step; v <= hi; v += step) s.add(v);
     return [...s].sort((p, q) => p - q);
   };
-  const xs = coords(x0, x1, edges.flatMap(e => [e.sx, e.tx]));
+  const xs = coords(x0, x1, allVariants.flatMap(e => [e.sx, e.tx]));
   const ys = coords(y0, y1, edges.flatMap(e => [e.sy, e.ty]));
   const nx = xs.length, ny = ys.length;
   const xi = new Map(xs.map((v, i) => [v, i])), yi = new Map(ys.map((v, i) => [v, i]));
@@ -152,27 +133,38 @@ function routeEdges(edges, boxes) {
 
   // The stub points next to each FK row and Id row belong to their arrows only
   const reserved = new Map();
-  for (const e of edges) {
+  for (const e of allVariants) {
     reserved.set(yi.get(e.sy) * nx + xi.get(e.sx), 'S:' + e.from);
     reserved.set(yi.get(e.ty) * nx + xi.get(e.tx), 'T:' + e.to);
   }
   const used = new Map(); // "nodeA-nodeB" → set of targets whose arrows use that grid segment
+  const usedNodes = new Map(); // node → set of targets whose arrows pass it (crossing it costs a little)
   const segKey = (p, q) => p < q ? p + '-' + q : q + '-' + p;
   const DX = [1, -1, 0, 0], DY = [0, 0, 1, -1], REV = [1, 0, 3, 2];
   const size = nx * ny * 4;
   const g = new Float64Array(size), prev = new Int32Array(size);
 
-  // short arrows first, so they get the direct lanes
-  const order = [...edges].sort((p, q) => (Math.abs(p.sx - p.tx) + Math.abs(p.sy - p.ty)) - (Math.abs(q.sx - q.tx) + Math.abs(q.sy - q.ty)));
+  // short arrows first, so they get the direct lanes; self-references last, to see what's taken
+  const len = e => e.a === e.b ? Infinity : Math.abs(e.sx - e.tx) + Math.abs(e.sy - e.ty);
+  const order = [...edges].sort((p, q) => len(p) - len(q));
   for (const e of order) {
-    const s = yi.get(e.sy) * nx + xi.get(e.sx), t = yi.get(e.ty) * nx + xi.get(e.tx);
-    let path = null;
-    if (!blocked[s] && !blocked[t]) path = astar(s, t, e);
-    if (!path) { e.points = simplePath(e); continue; }
+    let best = null;
+    for (const v of variants(e)) {
+      const s = yi.get(v.sy) * nx + xi.get(v.sx), t = yi.get(v.ty) * nx + xi.get(v.tx);
+      const r = !blocked[s] && !blocked[t] ? astar(s, t, v) : null;
+      if (r && (!best || r.cost < best.cost)) best = { ...r, v };
+    }
+    if (!best) { e.points = simplePath(e); continue; }
+    for (const k of SIDE_KEYS) e[k] = best.v[k];
+    const path = best.nodes;
     for (let k = 1; k < path.length; k++) {
       const key = segKey(path[k - 1], path[k]);
       if (!used.has(key)) used.set(key, new Set());
       used.get(key).add(e.to);
+    }
+    for (const n of path) {
+      if (!usedNodes.has(n)) usedNodes.set(n, new Set());
+      usedNodes.get(n).add(e.to);
     }
     const pts = [[e.x1, e.sy], ...path.map(n => [xs[n % nx], ys[Math.floor(n / nx)]]), [e.x2, e.ty]];
     e.points = pts;
@@ -184,6 +176,11 @@ function routeEdges(edges, boxes) {
     const shareCost = key => {
       const u = used.get(key);
       if (u) for (const to of u) if (to !== e.to) return SHARE_OTHER;
+      return 0;
+    };
+    const crossCost = n => {
+      const u = usedNodes.get(n);
+      if (u) for (const to of u) if (to !== e.to) return CROSS;
       return 0;
     };
     g.fill(Infinity);
@@ -200,7 +197,7 @@ function routeEdges(edges, boxes) {
       if (n === t && d === dirEnd) {
         const nodes = [];
         for (let c = st; c !== -1; c = prev[c]) if (!nodes.length || nodes[nodes.length - 1] !== c >> 2) nodes.push(c >> 2);
-        return nodes.reverse();
+        return { nodes: nodes.reverse(), cost: gc };
       }
       if (n === t) { // turn in place to leave the stub in the entry direction
         relax(st, t * 4 + dirEnd, gc + BEND, 0);
@@ -216,7 +213,7 @@ function routeEdges(edges, boxes) {
         const r = reserved.get(m);
         if (r && m !== t && r !== myT) continue;
         const len = Math.abs(xs[ii] - xs[i]) + Math.abs(ys[jj] - ys[j]);
-        const cost = gc + len * (1 + shareCost(segKey(n, m))) + (nd === d ? 0 : BEND);
+        const cost = gc + len * (1 + shareCost(segKey(n, m))) + crossCost(m) + (nd === d ? 0 : BEND);
         relax(st, m * 4 + nd, cost, h(m));
       }
     }
@@ -364,6 +361,7 @@ function diagramMarkup(interactive) {
 function drawDiagram() {
   computeGeometry();
   vp.innerHTML = diagramMarkup(true);
+  if (revealName) { reveal(revealName); revealName = null; }
 }
 
 // Hovering a row or an arrow highlights the arrow and both ends
@@ -411,6 +409,26 @@ function zoomAt(cx, cy, k) {
   view.s = s;
   applyView();
 }
+// The middle of what's on screen, in diagram coordinates (where unconnected new tables go)
+function viewCenter() {
+  const r = svg.getBoundingClientRect();
+  if (!r.width) return null;
+  return { x: (r.width / 2 - view.tx) / view.s, y: (r.height / 2 - view.ty) / view.s };
+}
+
+// Pan just enough to show a table's box
+function reveal(name) {
+  const t = model.tables.find(t => t.name === name), b = t && geometry.boxes.get(t);
+  const r = svg.getBoundingClientRect();
+  if (!b || !r.width) return;
+  const m = 30, top = 50; // keep clear of the toolbar
+  const x0 = b.x * view.s + view.tx, y0 = b.y * view.s + view.ty;
+  const x1 = x0 + b.w * view.s, y1 = y0 + b.h * view.s;
+  if (x0 < m) view.tx += m - x0; else if (x1 > r.width - m) view.tx -= Math.min(x1 - (r.width - m), x0 - m);
+  if (y0 < top) view.ty += top - y0; else if (y1 > r.height - m) view.ty -= Math.min(y1 - (r.height - m), y0 - top);
+  applyView();
+}
+
 function contentBounds(pad) {
   const bs = [...geometry.boxes.values()];
   if (!bs.length) return null;
@@ -488,7 +506,7 @@ $('#zoomIn').onclick = () => zoomCenter(1.2);
 $('#zoomOut').onclick = () => zoomCenter(1 / 1.2);
 $('#fitBtn').onclick = fit;
 $('#layoutBtn').onclick = () => {
-  autoLayout(model.tables, geometry.dims);
+  arrangeAll(model.tables, geometry.dims);
   store.set('pos', pos);
   drawDiagram();
   fit();

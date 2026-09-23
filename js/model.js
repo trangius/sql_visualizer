@@ -13,6 +13,7 @@ const isIdName = n => n.toLowerCase() === 'id';
 const DEFAULT_VC = 128;
 const INT_TYPES = new Set(['int', 'integer', 'bigint', 'smallint', 'mediumint', 'tinyint']);
 const problem = (line, msg, level = 'error') => ({ line, msg, level });
+const snap = v => Math.round(v / 10) * 10; // the diagram's 10px grid
 
 // Canonical short form of a type: "VARCHAR(128)" → "vc", "varchar(50)" → "vc(50)", "INT(11)" → "int"
 function normType(t) {
