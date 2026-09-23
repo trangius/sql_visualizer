@@ -189,7 +189,7 @@ function routeEdges(edges, boxes) {
     const pts = [[e.x1, e.sy], ...path.map(n => [xs[n % nx], ys[Math.floor(n / nx)]]), [e.x2, e.ty]];
     e.points = pts;
   }
-  for (const e of edges) e.d = pathD(e.points);
+  addJumps(edges);
 
   function astar(s, t, e) {
     const dir0 = e.outDir, dirEnd = e.inDir, myT = 'T:' + e.to;
@@ -248,23 +248,59 @@ function routeEdges(edges, boxes) {
   }
 }
 
-// Orthogonal path with rounded corners (radius 9, smaller on short segments)
-function pathD(points, r = 9) {
-  // drop points in the middle of straight runs
-  const p = points.filter((q, i) => {
+// Points of a route without the ones in the middle of straight runs
+function simplify(points) {
+  return points.filter((q, i) => {
     if (i === 0 || i === points.length - 1) return true;
     const a = points[i - 1], b = points[i + 1];
     return !((a[0] === q[0] && q[0] === b[0]) || (a[1] === q[1] && q[1] === b[1]));
   });
+}
+
+// Where arrows cross, the horizontal line jumps over the vertical one with a small arch.
+// Only real crossings count: a line that just ends on another (merging into the same
+// Id row) is not a crossing. Next to a corner, the corner's rounding shrinks to make room.
+const JUMP_R = 5;
+function addJumps(edges) {
+  const simple = edges.map(e => simplify(e.points));
+  const verticals = simple.flatMap((p, k) => p.slice(1).flatMap((q, i) =>
+    p[i][0] === q[0] ? [{ k, x: q[0], y0: Math.min(p[i][1], q[1]), y1: Math.max(p[i][1], q[1]) }] : []));
+  edges.forEach((e, k) => {
+    const p = simple[k], jumps = [];
+    for (let i = 1; i < p.length; i++) {
+      const [ax, ay] = p[i - 1], [bx, by] = p[i];
+      if (ay !== by) { jumps.push([]); continue; }
+      const lo = Math.min(ax, bx) + JUMP_R + 1, hi = Math.max(ax, bx) - JUMP_R - 1;
+      const xs = verticals
+        .filter(v => v.k !== k && v.x > lo && v.x < hi && ay > v.y0 + 1 && ay < v.y1 - 1)
+        .map(v => v.x)
+        .sort((u, w) => (bx > ax ? u - w : w - u))
+        .filter((x, j, arr) => !j || Math.abs(x - arr[j - 1]) > 2 * JUMP_R + 2); // no overlapping jumps
+      jumps.push(xs);
+    }
+    e.d = pathD(p, jumps);
+  });
+}
+
+// Orthogonal path with rounded corners (radius 9, smaller on short segments),
+// and jumps[i] = x positions where segment i (from point i to i+1) hops over another line
+function pathD(p, jumps = [], r = 9) {
+  const hop = (i, y, dir) => (jumps[i] ?? []).map(x =>
+    `L${x - JUMP_R * dir},${y}A${JUMP_R},${JUMP_R} 0 0 ${dir > 0 ? 1 : 0} ${x + JUMP_R * dir},${y}`).join('');
   let d = `M${p[0][0]},${p[0][1]}`;
   for (let i = 1; i < p.length - 1; i++) {
     const [x0, y0] = p[i - 1], [x1, y1] = p[i], [x2, y2] = p[i + 1];
     const d1 = Math.hypot(x1 - x0, y1 - y0), d2 = Math.hypot(x2 - x1, y2 - y1);
-    const rr = Math.min(r, d1 / 2, d2 / 2);
+    // a jump right next to this corner: round the corner less so they don't overlap
+    const near = [...(y0 === y1 ? jumps[i - 1] ?? [] : []), ...(y1 === y2 ? jumps[i] ?? [] : [])]
+      .map(x => Math.abs(x - x1) - JUMP_R);
+    const rr = Math.max(0, Math.min(r, d1 / 2, d2 / 2, ...near));
+    if (y0 === y1) d += hop(i - 1, y0, Math.sign(x1 - x0));
     d += `L${x1 + (x0 - x1) / d1 * rr},${y1 + (y0 - y1) / d1 * rr}Q${x1},${y1} ${x1 + (x2 - x1) / d2 * rr},${y1 + (y2 - y1) / d2 * rr}`;
   }
-  const l = p[p.length - 1];
-  return d + `L${l[0]},${l[1]}`;
+  const n = p.length, [lx, ly] = p[n - 1];
+  if (p[n - 2][1] === ly) d += hop(n - 2, ly, Math.sign(lx - p[n - 2][0]));
+  return d + `L${lx},${ly}`;
 }
 
 class MinHeap {
