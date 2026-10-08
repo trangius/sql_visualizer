@@ -1,13 +1,7 @@
 'use strict';
 
-// ─── Sample data ─────────────────────────────────────────────────────────────
-// A few made-up rows per table, so a foreign key becomes something concrete:
-// OwnerId = 3 is the owner in row 3. Values are guessed from the column name
-// (name, email, city, price, …) in English or Swedish, else from the type.
-// Every value is seeded by table, column and row, so the data stays put while you type.
-// Foreign keys only use values that exist in the table they point to.
-
-const SAMPLE_ROWS = 5;
+// ─── Data helpers ────────────────────────────────────────────────────────────
+// Explicit rows from @data blocks. Tables without an @data block stay empty.
 
 // Seeded randomness: the same key always gives the same number in [0, 1)
 function rand(key) {
@@ -203,41 +197,21 @@ const sampleCache = new WeakMap();
 function sampleData(tables) {
   if (sampleCache.has(tables)) return sampleCache.get(tables);
   const data = new Map();
-  // 1. Every column that isn't a foreign key, row by row. Numeric primary keys count 1, 2, 3…
+  // Use rows written in the @data block. Values are mapped by column order,
+  // which keeps the text format compact and predictable.
   for (const t of tables) {
-    const sv = SWEDISH.test(low(t.name + ' ' + t.cols.map(c => c.name).join(' ')));
-    const rows = [];
-    for (let i = 0; i < SAMPLE_ROWS; i++) {
-      const person = { first: nth(W.first[sv ? 1 : 0], t.name + '#f', i), last: nth(W.last[sv ? 1 : 0], t.name + '#l', i) };
-      const values = new Map();
-      for (const c of t.cols) {
-        if (c.target) continue;
-        values.set(c, c.isPk && t.pkCols.length === 1 && typeInfo(c).int ? String(i + 1) : sampleValue(t, c, i, sv, person));
-      }
-      rows.push({ values });
-    }
-    // unique columns (and a single-column key): a repeated value gets the row number added
-    for (const c of t.cols) {
-      if (c.target || !(c.unique || (c.isPk && t.pkCols.length === 1))) continue;
-      const seen = new Set();
-      rows.forEach((r, i) => {
-        let v = r.values.get(c);
-        if (v != null && seen.has(v)) {
-          const { int, len } = typeInfo(c), sfx = ` ${i + 1}`;
-          // shortened to make room for the number, so it still fits in the column
-          v = int ? String(1000 + i) : len ? (v.slice(0, Math.max(0, len - sfx.length)) + sfx).slice(-len) : v + sfx;
-          r.values.set(c, v);
-        }
-        seen.add(v);
-      });
-    }
-    data.set(t, rows);
+    if (t.dataRows?.length) {
+      data.set(t, t.dataRows.map(row => ({
+        values: new Map(t.cols.map((c, i) => [c, row.values[i] ?? null])),
+      })));
+    } else data.set(t, []);
   }
-  // 2. Foreign keys: values that exist in the column they point to. A table is finished
-  // (including rows dropped as duplicates) before the tables pointing to it use its values.
+  // Explicit rows are never rewritten. This keeps the Data view faithful to the
+  // text, including foreign-key values that are intentionally NULL or incomplete.
   const done = new Set(), busy = new Set();
   const finish = t => {
     if (done.has(t) || busy.has(t)) return;
+    if (t.dataRows?.length) { done.add(t); return; }
     busy.add(t);
     for (const c of t.cols) if (c.target && c.target !== t) finish(c.target);
     const rows = data.get(t), multiPk = t.pkCols.length > 1, keys = new Set();
@@ -267,11 +241,12 @@ function sampleData(tables) {
   return data;
 }
 
-// INSERT statements for the sample rows (appended to the MariaDB script)
-function sampleInserts(tables) {
+// INSERT statements for the explicit @data rows (appended to the MariaDB script)
+function dataInserts(tables) {
+  if (!tables.some(t => t.dataRows?.length)) return '';
   const data = sampleData(tables);
   const lit = (c, v) => v == null ? 'NULL' : isNumeric(c) ? v : `'${v.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`;
-  const out = ['-- Sample data (made up)', 'SET FOREIGN_KEY_CHECKS = 0;'];
+  const out = ['-- Data from @data blocks', 'SET FOREIGN_KEY_CHECKS = 0;'];
   for (const t of topoOrder(tables.filter(t => t.cols.length)).order) {
     const rows = data.get(t);
     if (!rows.length) continue;

@@ -28,6 +28,22 @@ Dog
 
 Indent columns under each table. `Id` is an integer primary key; columns without a type default to `varchar(128)`. The **Syntax** button in the app has the full reference.
 
+### Table data
+
+Add explicit rows with an `@data` block. Values follow the column order and are separated with commas:
+
+```text
+Dog
+  Id int
+  Name vc
+
+  @data
+    1, Fredrik
+    2, Bamse
+```
+
+The **Data** view displays these rows. Tables without an `@data` block are shown empty.
+
 ## Run locally
 
 Open `index.html` in your browser. No installation or build step needed.

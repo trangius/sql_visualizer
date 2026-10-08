@@ -93,7 +93,7 @@ function measureData(t) {
   const cws = cols.map((c, i) => Math.max(textW(c.name, FONT_DHEAD), ...cells.map(row => textW(row[i].text, FONTS.type))));
   const xs = cws.map((_, i) => PAD_X + cws.slice(0, i).reduce((a, b) => a + b + CELL_GAP, 0));
   const w = Math.max(MIN_W, textW(t.name, FONTS.head) + 2 * PAD_X + 12, 2 * PAD_X + cws.reduce((a, b) => a + b, 0) + CELL_GAP * Math.max(0, cols.length - 1));
-  return { w: Math.ceil(w / 10) * 10, h: dataRowY(Math.max(1, rows.length)) - DATA_H / 2 + 6, rows: [], data: { cols, cells, xs, cws } };
+  return { w: Math.ceil(w / 10) * 10, h: dataRowY(rows.length + 1) - DATA_H / 2 + 6, rows: [], data: { cols, cells, xs, cws } };
 }
 
 function measureTable(t) {
@@ -581,10 +581,14 @@ function dataBoxBody(t, b, interactive) {
   let s = cols.map((c, i) => `<text class="dhead${kind(c)}" x="${xs[i]}" y="${ch}">` +
     (c.target ? `<title>${esc(c.name)} → ${esc(c.target.name)}.${esc(c.targetCol.name)}</title>` : '') + `${esc(c.name)}</text>`).join('');
   s += `<line class="sep" x1="${PAD_X}" y1="${HEAD_H + 6 + COLHEAD_H - .5}" x2="${b.w - PAD_X}" y2="${HEAD_H + 6 + COLHEAD_H - .5}"/>`;
-  if (!cells.length) return s + `<text class="dcell null" x="${PAD_X}" y="${dataRowY(0)}">no rows</text>`;
+  const addY = dataRowY(0);
+  s += `<g class="drow empty-data-row" data-row="-1">`;
+  if (interactive) s += `<rect class="hit" x="1" y="${addY - DATA_H / 2}" width="${b.w - 2}" height="${DATA_H}"/>`;
+  s += `<text class="dcell null" x="${PAD_X}" y="${addY}">+ Add row</text></g>`;
+  if (!cells.length) return s;
   cells.forEach((row, k) => {
-    const y = dataRowY(k);
-    s += `<g class="drow">`;
+    const y = dataRowY(k + 1);
+    s += `<g class="drow" data-row="${k}">`;
     if (interactive) s += `<rect class="hit" x="1" y="${y - DATA_H / 2}" width="${b.w - 2}" height="${DATA_H}"/>`;
     row.forEach((cell, i) => {
       if (cell.key) s += `<rect class="dmark" style="--h:${cell.hue}" data-k="${esc(cell.key)}" x="${xs[i] - 5}" y="${y - DATA_H / 2 + 3}" width="${cws[i] + 10}" height="${DATA_H - 6}" rx="4"/>`;

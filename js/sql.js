@@ -204,7 +204,7 @@ function parseSQL(src) {
       const body = p.group();
       if (!body) { warn(line, `CREATE TABLE ${name.v} without a column list. Ignored.`); continue; }
       if (findAcc(name.v)) { error(name.line, `Table ${name.v} is created twice`); continue; }
-      const acc = { name: name.v, line: name.line, cols: [], pk: null, fks: [], uniques: [], indexes: [] };
+      const acc = { name: name.v, line: name.line, cols: [], pk: null, fks: [], uniques: [], indexes: [], dataRows: [] };
       accs.push(acc);
       for (const def of splitTop(body)) parseDef(new Cursor(def), acc, warn, error);
     } else if (kw === 'ALTER') {
@@ -220,7 +220,9 @@ function parseSQL(src) {
         c.eatW('COLUMN');
         parseDef(c, acc, warn, error);
       }
-    } else if (['DROP', 'SET', 'USE', 'INSERT', 'SELECT', 'UPDATE', 'DELETE', 'START', 'COMMIT', 'BEGIN',
+    } else if (kw === 'INSERT') {
+      parseInsert(p, line, findAcc, warn, error);
+    } else if (['DROP', 'SET', 'USE', 'SELECT', 'UPDATE', 'DELETE', 'START', 'COMMIT', 'BEGIN',
                 'LOCK', 'UNLOCK', 'TRUNCATE', 'DELIMITER', 'SHOW', 'DESCRIBE'].includes(kw)) {
       // not part of the schema
     } else {
@@ -228,6 +230,34 @@ function parseSQL(src) {
     }
   }
   return { tables: accs.map(a => finalizeTable(a, warn, error)), problems };
+}
+
+function parseInsert(p, line, findAcc, warn, error) {
+  p.next();
+  if (!p.eatW('INTO')) { warn(line, 'INSERT without INTO is ignored.'); return; }
+  const name = p.qname(), acc = name && findAcc(name.v);
+  if (!acc) { warn(line, `INSERT into unknown table ${name?.v ?? ''} is ignored.`); return; }
+  const columnNames = p.isP('(') ? p.identList() : acc.cols.map(c => c.name);
+  const indexes = columnNames.map(n => acc.cols.findIndex(c => c.name.toLowerCase() === n.toLowerCase()));
+  if (indexes.some(i => i < 0)) { error(line, `INSERT into ${acc.name} uses an unknown column.`); return; }
+  if (!p.eatW('VALUES')) { warn(line, `INSERT into ${acc.name} without VALUES is ignored.`); return; }
+  for (const part of splitTop(p.t.slice(p.i))) {
+    const values = new Cursor(part).group();
+    if (!values) { warn(line, `Could not read INSERT values for ${acc.name}.`); continue; }
+    const items = splitTop(values);
+    if (items.length !== indexes.length) {
+      error(line, `INSERT into ${acc.name} has ${items.length} values for ${indexes.length} columns.`);
+      continue;
+    }
+    const row = Array(acc.cols.length).fill(null);
+    items.forEach((item, i) => {
+      const value = item.length === 1 && item[0].t === 'w' && item[0].u === 'NULL'
+        ? null
+        : item.length === 1 && item[0].t === 'str' ? item[0].v : tokText(item).trim();
+      row[indexes[i]] = value;
+    });
+    acc.dataRows.push({ values: row, line });
+  }
 }
 
 function parseDef(p, acc, warn, error) {
@@ -288,10 +318,11 @@ function parseColumn(p, acc, warn, error) {
   let type = typeTok.v;
   if (p.isP('(')) type += '(' + tokText(p.group()) + ')';
   while (p.isW('UNSIGNED', 'SIGNED', 'ZEROFILL')) type += ' ' + p.next().v;
-  const col = { name: nameTok.v, type, notNull: false, unique: false, pk: false, line };
+  const col = { name: nameTok.v, type, notNull: false, unique: false, pk: false, autoInc: false, line };
   while (!p.done) {
     if (p.eatW('NOT')) { if (p.eatW('NULL')) col.notNull = true; continue; }
-    if (p.eatW('NULL', 'AUTO_INCREMENT')) continue;
+    if (p.eatW('NULL')) continue;
+    if (p.eatW('AUTO_INCREMENT')) { col.autoInc = true; continue; }
     if (p.eatW('UNIQUE')) { p.eatW('KEY'); col.unique = true; continue; }
     if (p.eatW('PRIMARY')) { p.eatW('KEY'); col.pk = true; continue; }
     if (p.eatW('KEY')) { col.pk = true; continue; }
@@ -332,6 +363,7 @@ function finalizeTable(acc, warn, error) {
     pk: !idIsPk && pkSet.has(lc(c.name)),
     nullable: !c.notNull && !pkSet.has(lc(c.name)) && !(c === id && !pkSet.size),
     unique: c.unique,
+    autoInc: c.autoInc,
     ref: null,
     refCol: null,
     line: c.line,
@@ -349,5 +381,5 @@ function finalizeTable(acc, warn, error) {
     col.ref = fk.rt;
     col.refCol = fk.rcols[0] ?? null; // genText writes just "-> Table" when this is the table's primary key
   }
-  return { name: acc.name, line: acc.line, cols, indexes: acc.indexes };
+  return { name: acc.name, line: acc.line, cols, indexes: acc.indexes, dataRows: acc.dataRows ?? [] };
 }

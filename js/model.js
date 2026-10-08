@@ -36,20 +36,38 @@ function sqlType(t) {
 }
 
 // ─── Text syntax → model ─────────────────────────────────────────────────────
-// model: { tables: [{ name, line, cols: [{ name, type, pk, nullable, unique, ref, refCol, line }] }] }
+// model: { tables: [{ name, line, cols: [...], dataRows: [{ values, line }] }] }
 // ref/refCol: "-> Table" (its primary key, refCol null) or "-> Table.Column"
 
-const FLAG = /^\(?(pk|null|unique)\)?$/i;
+const FLAG = /^\(?(pk|null|unique|auto_increment)\)?$/i;
 // The name an index gets in the SQL when none was given
 const indexName = (table, cols) => `idx_${table}_${cols.join('_')}`;
+
+function splitDataValues(text) {
+  const separator = text.includes(',') ? ',' : text.includes('|') ? '|' : ',';
+  const values = [];
+  let start = 0, quote = null, escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && quote) { escaped = true; continue; }
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === separator) { values.push(text.slice(start, i).trim()); start = i + 1; }
+  }
+  values.push(text.slice(start).trim());
+  return values;
+}
 
 function parseText(src) {
   const tables = [], problems = [];
   let cur = null;
+  let dataIndent = -1;
   src.split('\n').forEach((raw, i) => {
     const line = i + 1;
     const code = raw.replace(/#.*$/, '');
     if (!code.trim()) return;
+    const indent = raw.match(/^\s*/)[0].length;
 
     if (!/^\s/.test(code)) {
       const name = code.trim().replace(/:$/, '');
@@ -63,7 +81,8 @@ function parseText(src) {
         cur = { name, cols: [], indexes: [] };
         return;
       }
-      cur = { name, line, cols: [], indexes: [] };
+      cur = { name, line, cols: [], indexes: [], dataRows: [] };
+      dataIndent = -1;
       tables.push(cur);
       return;
     }
@@ -72,6 +91,32 @@ function parseText(src) {
       problems.push(problem(line, 'Column outside a table. Write a table name (without indentation) first.'));
       return;
     }
+
+    if (cur.dataRows && /^\s*@data\s*$/i.test(code)) {
+      dataIndent = indent;
+      return;
+    }
+
+    // Data rows are comma-separated and indented one level below @data.
+    // Values are kept as strings here; sample.js applies SQL type semantics later.
+    if (dataIndent >= 0 && indent > dataIndent) {
+      const values = splitDataValues(code.trim()).map(v => {
+        const value = v.trim();
+        if (/^null$/i.test(value)) return null;
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          return value.slice(1, -1).replace(/\\([\\"'])/g, '$1');
+        }
+        return value;
+      });
+      if (!values.length || values.every(v => v === '')) return;
+      if (values.length !== cur.cols.length) {
+        problems.push(problem(line, `${cur.name} data row has ${values.length} values, but the table has ${cur.cols.length} columns`));
+      } else {
+        cur.dataRows.push({ values, line });
+      }
+      return;
+    }
+    dataIndent = -1;
 
     if (/^\s+index\b\s*(?:[\p{L}_][\p{L}\p{N}_$]*\s*)?\(/iu.test(code)) {
       problems.push(problem(line, 'Indexes are not supported in Simple mode.'));
@@ -102,7 +147,7 @@ function parseText(src) {
       problems.push(problem(line, `Column ${name} is defined twice in ${cur.name}`));
       return;
     }
-    const col = { name, type: null, pk: false, nullable: false, unique: false, ref, refCol, line };
+    const col = { name, type: null, pk: false, nullable: false, unique: false, autoInc: false, ref, refCol, line };
     const typeParts = [];
     for (const t of toks) {
       if (/^\(?index\)?$/i.test(t)) {
@@ -113,6 +158,7 @@ function parseText(src) {
       if (!f) typeParts.push(t);
       else if (f[1].toLowerCase() === 'pk') col.pk = true;
       else if (f[1].toLowerCase() === 'null') col.nullable = true;
+      else if (f[1].toLowerCase() === 'auto_increment') col.autoInc = true;
       else col.unique = true;
     }
     col.type = typeParts.join(' ') || null;
@@ -232,8 +278,29 @@ function resolve(tables, implicit = false) {
       }
       c.isPk = t.pkCols.includes(c);
       c.indexed = false;
-      c.autoInc = c.isPk && t.pkCols.length === 1 && isIdName(c.name) && INT_TYPES.has(c.effType.split(/[ (]/)[0]);
+      c.autoInc = c.autoInc || c.isPk && t.pkCols.length === 1 && isIdName(c.name) && INT_TYPES.has(c.effType.split(/[ (]/)[0]);
+      if (c.autoInc && (!c.isPk || !INT_TYPES.has(c.effType.split(/[ (]/)[0])))
+        problems.push(problem(c.line, 'AUTO_INCREMENT requires an integer primary key'));
       if (c.isPk && c.nullable) problems.push(problem(c.line, `${c.name} is a primary key and can't be null`));
+    }
+
+    // Explicit data may still be written in the sidebar, even for an
+    // AUTO_INCREMENT Id. Duplicate primary-key values are never valid.
+    const dataRows = t.dataRows ?? [];
+    if (t.idCol && dataRows.length) {
+      const idIndex = t.cols.indexOf(t.idCol);
+      const seenIds = new Map();
+      for (const row of dataRows) {
+        const value = row.values[idIndex];
+        if (value == null || value === '') continue;
+        const key = String(value).trim();
+        const previous = seenIds.get(key);
+        if (previous) {
+          problems.push(problem(row.line, `Duplicate ${t.idCol.name} value "${value}" in ${t.name}; already used on line ${previous.line}`));
+        } else {
+          seenIds.set(key, row);
+        }
+      }
     }
   }
   // Indexes: a one-column index is shown as a flag on its column, a longer one below the columns
@@ -287,8 +354,20 @@ function genText(tables, notes) {
       if (c.pk) parts.push('pk');
       if (c.nullable) parts.push('null');
       if (c.unique) parts.push('unique');
+      if (c.autoInc) parts.push('auto_increment');
       if (c.ref) parts.push('-> ' + refText(c));
       out.push('  ' + parts.join(' '));
+    }
+    if (t.dataRows?.length) {
+      out.push('', '  @data');
+      for (const row of t.dataRows) {
+        const values = row.values.map(value => {
+          if (value == null) return 'NULL';
+          const text = String(value);
+          return /[\s,#|]/.test(text) ? `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'` : text;
+        });
+        out.push('    ' + values.join(', '));
+      }
     }
   });
   return out.join('\n') + '\n';

@@ -20,7 +20,7 @@ function hlTextLine(line) {
   return h + com;
 }
 
-const SQL_KW = new Set(`CREATE TABLE PRIMARY KEY FOREIGN REFERENCES NOT NULL AUTO_INCREMENT UNIQUE DROP IF EXISTS SET
+const SQL_KW = new Set(`CREATE TABLE INSERT INTO VALUES PRIMARY KEY FOREIGN REFERENCES NOT NULL AUTO_INCREMENT UNIQUE DROP IF EXISTS SET
 ALTER ADD CONSTRAINT DEFAULT INDEX ON DELETE UPDATE CASCADE COLUMN ENGINE CHARSET COLLATE CHECK`.split(/\s+/));
 const SQL_TYPES = /^(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|BIT|BOOL|BOOLEAN|CHAR|VARCHAR|TEXT|TINYTEXT|MEDIUMTEXT|LONGTEXT|BLOB|DATE|DATETIME|TIMESTAMP|TIME|YEAR|ENUM|SET|JSON|UNSIGNED)$/i;
 // st carries a /* comment */ that is still open over to the next line
@@ -303,15 +303,23 @@ function regenerate(which) {
   if (which === 'sql' ? !state.sqlStale : !state.textStale) return;
   histBegin('regenerate', { silent: true });
   if (which === 'sql') {
-    const r = parseText(state.text);
+    const source = state.text.trim() ? state.text : state.sql;
+    const r = parseText(source);
     resolve(r.tables);
-    state.sql = genSQL(r.tables);
+    state.sql = sqlWithData(r.tables);
     state.sqlStale = false;
+    state.textStale = false;
   } else {
     state.text = sqlToText(state.sql);
     state.textStale = false;
   }
   histCommit();
+}
+
+function sqlWithData(tables) {
+  const schema = genSQL(tables);
+  const data = dataInserts(tables);
+  return data ? `${schema}\n${data}` : schema;
 }
 
 function setMode(mode) {
@@ -325,6 +333,12 @@ function setMode(mode) {
 }
 
 function loadEditor() {
+  const sqlContainsSimpleSyntax = /(^|\n)\s*@data\s*$/im.test(state.sql) || /^\s*#.*(?:\r?\n)\s+\S+/m.test(state.sql);
+  if (state.mode === 'sql' && (!state.sql.trim() || state.sql.trim() === state.text.trim() || sqlContainsSimpleSyntax)) {
+    if (!state.text.trim() && sqlContainsSimpleSyntax) state.text = state.sql;
+    state.sqlStale = true;
+  }
+  regenerate(state.mode);
   ta.value = state.mode === 'text' ? state.text : state.sql;
   ta.scrollTop = 0;
   updateModeSeg();
@@ -583,7 +597,7 @@ function currentSql() {
   if (!state.sqlStale) return state.sql;
   const r = parseText(state.text);
   resolve(r.tables);
-  return genSQL(r.tables);
+  return sqlWithData(r.tables);
 }
 async function copySql() {
   closeMenus();
@@ -606,8 +620,8 @@ $('#sqlBtn').onclick = () => {
 $('#sqlDataBtn').onclick = () => {
   closeMenus();
   const name = exportName('sql');
-  download(new Blob([currentSql() + '\n' + sampleInserts(model.tables)], { type: 'text/sql' }), name);
-  toast(`Saved ${name} with sample data`);
+  download(new Blob([currentSql()], { type: 'text/sql' }), name);
+  toast(`Saved ${name} with data`);
 };
 $('#copySqlBtn').onclick = copySql;
 document.addEventListener('keydown', e => {

@@ -15,7 +15,7 @@ $('#typeList').innerHTML = TYPE_SUGGESTIONS.map(t => `<option value="${t}">`).jo
 // dlg.fk: the open foreign-key chooser { row, table, usePk, col, filter }
 let dlg = null;
 
-const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, ref: null, refCol: null, comment: '' });
+const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, autoInc: false, ref: null, refCol: null, comment: '' });
 const inlineComment = line => { const i = (line ?? '').indexOf('#'); return i >= 0 ? line.slice(i).trim() : ''; };
 const lc = s => s.toLowerCase();
 const pointsToPk = c => c.target.pkCols.length === 1 && c.target.pkCols[0] === c.targetCol;
@@ -47,6 +47,7 @@ function openTableEditor(name, at = null) {
   dlg.cols = t
     ? t.cols.map(c => ({
         name: c.name, origName: c.name, type: c.type ?? '', pk: c.pk, nullable: c.nullable, unique: c.unique,
+        autoInc: c.autoInc,
         ref: !c.ref ? null : c.target === t || (!c.target && lc(c.ref) === lc(t.name)) ? SELF : c.target?.name ?? c.ref,
         refCol: !c.ref ? null : !c.target ? c.refCol : pointsToPk(c) ? null : c.targetCol.name,
         comment: inlineComment(lines[c.line - 1]),
@@ -112,6 +113,7 @@ function renderCols() {
       <label class="chk" title="Primary key"><input type="checkbox" class="c-pk"${c.pk ? ' checked' : ''}></label>
       <label class="chk" title="May be NULL"><input type="checkbox" class="c-null"${c.nullable ? ' checked' : ''}></label>
       <label class="chk" title="UNIQUE"><input type="checkbox" class="c-unique"${c.unique ? ' checked' : ''}></label>
+      <label class="chk" title="AUTO_INCREMENT"><input type="checkbox" class="c-auto"${c.autoInc ? ' checked' : ''}></label>
       <div class="c-fk">${c.ref
         ? `<button class="fk-chip" data-act="fk" title="Change what this points to">→ ${esc(refLabel(c))}</button>` +
           `<button class="icon-x" data-act="unlink" title="Not a foreign key">×</button>`
@@ -140,6 +142,18 @@ function refreshHints() {
     const nul = row.querySelector('.c-null');
     nul.disabled = c.pk || autoPk;
     if (nul.disabled) { nul.checked = false; c.nullable = false; }
+    const unique = row.querySelector('.c-unique');
+    const pkImpliesUnique = c.pk || autoPk;
+    unique.checked = !pkImpliesUnique && c.unique;
+    unique.disabled = pkImpliesUnique;
+    unique.parentNode.title = pkImpliesUnique ? 'UNIQUE is implied by primary key' : 'UNIQUE';
+    const auto = row.querySelector('.c-auto');
+    const autoAllowed = isId && INT_TYPES.has(normType(c.type || 'int').split(/[ (]/)[0]);
+    const implicitAuto = autoAllowed && autoPk;
+    if (!autoAllowed) c.autoInc = false;
+    auto.checked = autoAllowed && (c.autoInc || implicitAuto);
+    auto.disabled = !autoAllowed || implicitAuto;
+    auto.parentNode.title = !autoAllowed ? 'AUTO_INCREMENT is only available for an integer Id' : 'AUTO_INCREMENT';
     row.querySelector('.c-type').placeholder = isId || c.ref ? 'int' : 'vc';
   }
 }
@@ -155,6 +169,7 @@ tdCols.addEventListener('input', e => {
   else if (cl.contains('c-pk')) c.pk = e.target.checked;
   else if (cl.contains('c-null')) c.nullable = e.target.checked;
   else if (cl.contains('c-unique')) c.unique = e.target.checked;
+  else if (cl.contains('c-auto')) c.autoInc = e.target.checked;
   e.target.classList.remove('invalid');
   refreshHints();
 });
@@ -347,7 +362,8 @@ function saveTable() {
     if (c.type) parts.push(c.type);
     if (c.pk) parts.push('pk');
     if (c.nullable) parts.push('null');
-    if (c.unique) parts.push('unique');
+    if (c.unique && !c.pk) parts.push('unique');
+    if (c.autoInc) parts.push('auto_increment');
     if (c.ref) {
       const self = toSelf(c);
       const refCol = self && c.refCol ? renamed.get(lc(c.refCol)) ?? c.refCol : c.refCol;
@@ -469,7 +485,10 @@ dlgEl.addEventListener('keydown', e => {
 svg.addEventListener('dblclick', e => {
   // the canvas captures the pointer on mousedown (for dragging), so the event's target
   // is the canvas itself: ask what is really under the pointer
-  const g = document.elementFromPoint(e.clientX, e.clientY)?.closest('.tbl');
+  const underPointer = document.elementFromPoint(e.clientX, e.clientY);
+  // Data rows have their own editor, registered after this table editor.
+  if (underPointer?.closest('.drow')) return;
+  const g = underPointer?.closest('.tbl');
   if (g) {
     openTableEditor(g.dataset.t);
   } else {
