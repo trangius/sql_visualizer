@@ -99,7 +99,7 @@ function lineHues(tables) {
   const by = new Map();
   for (const t of tables) {
     // a key over several columns colours its own line instead
-    for (const c of t.cols) by.set(c.line, { pk: c.isPk && t.pkCols.length === 1 ? t.hue : null, ref: c.target ? c.keyHue : null });
+    for (const c of t.cols) by.set(c.line, { pk: solePk(t, c) ? t.hue : null, ref: c.target ? c.keyHue : null });
     if (t.pkLine && t.pkCols.length > 1) by.set(t.pkLine.line, { key: t.hue });
     for (const u of t.multiUniques ?? []) by.set(u.line, { key: u.hue });
   }

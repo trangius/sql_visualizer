@@ -65,7 +65,7 @@ function keyHues(tables) {
   for (const t of tables) {
     for (const c of t.cols) {
       if (c.target) {
-        const tc = c.targetCol, pk = c.target.pkCols.length === 1 && c.target.pkCols[0] === tc;
+        const tc = c.targetCol, pk = pointsToPk(c);
         if (!pk && !colHue.has(tc)) colHue.set(tc, next());
         c.keyHue = pk ? c.target.hue : colHue.get(tc);
       } else c.keyHue = c.isPk ? t.hue : null;
@@ -610,7 +610,7 @@ function diagramEdges(tables, boxes) {
         fromTable: t.name, toTable: c.target.name,
         // what the schema guarantees: a unique FK (or one that is the whole PK) makes it 1-1,
         // a nullable FK means a row may have no parent
-        unique: c.unique || (c.isPk && t.pkCols.length === 1),
+        unique: c.unique || solePk(t, c),
         nullable: c.nullable,
         implicit: c.implicit,
         from: t.name + '.' + c.name,

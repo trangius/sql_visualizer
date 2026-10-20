@@ -18,7 +18,6 @@ let dlg = null;
 const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, ref: null, refCol: null, comment: '' });
 const inlineComment = line => { const i = commentAt(line ?? ''); return i >= 0 ? line.slice(i).trim() : ''; };
 const lc = s => s.toLowerCase();
-const pointsToPk = c => c.target.pkCols.length === 1 && c.target.pkCols[0] === c.targetCol;
 
 // The model of the text syntax, converting from SQL first if the SQL was edited last
 function textModel() {

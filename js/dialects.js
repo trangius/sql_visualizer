@@ -98,11 +98,6 @@ function shortName(n, max) {
   return n.slice(0, max - 7) + '_' + h.toString(36).padStart(6, '0').slice(-6);
 }
 
-// A type as its parts: "decimal(8,2) unsigned" → { base: 'decimal', args: '8,2', unsigned: true }
-function typeParts(t) {
-  const m = t.match(/^(\w+)(?:\(([^)]*)\))?(.*)$/);
-  return { base: m[1], args: m[2] ?? null, unsigned: /\bunsigned\b/.test(m[3]) };
-}
 const isBoolType = t => /^(bool|boolean|bit)\b/.test(t);
 const enumValues = t => t.match(/^enum\((.*)\)$/)?.[1] ?? null;
 const enumCheckSQL = (c, Q) => enumValues(c.effType) ? ` CHECK (${Q(c.name)} IN (${enumValues(c.effType)}))` : '';
@@ -147,8 +142,34 @@ const createIndexes = (t, taken, D) => namedIndexes(t, taken, D).map(ix =>
   `CREATE INDEX ${D.q(ix.name)} ON ${D.q(t.name)} (${ix.cols.map(D.q).join(', ')});`);
 
 const tablesOf = tables => topoOrder(tables.filter(t => t.cols.length));
-const isKey = c => (c.target.pkCols.length === 1 && c.target.pkCols[0] === c.targetCol) || c.targetCol.unique;
+const isKey = c => pointsToPk(c) || c.targetCol.unique;
 const links = tables => tables.flatMap(t => t.cols.filter(c => c.target && !c.implicit).map(c => ({ t, c })));
+
+// ─── What the databases refuse ───────────────────────────────────────────────
+
+const keyProblems = (tables, db) => links(tables).filter(({ c }) => !isKey(c)).map(({ c }) =>
+  problem(c.line, `${db} needs ${c.target.name}.${c.targetCol.name} to be the primary key or unique`));
+
+// Columns in a key or index of a type the database can't key (isLob: TEXT, BLOB…)
+const keyedCol = (t, c) => c.isPk || c.unique || t.multiUniques.some(u => u.cols.includes(c)) || t.indexes?.some(ix => ix.cols.includes(c.name));
+const lobKeyProblems = (tables, isLob, db) => tables.flatMap(t => t.cols.filter(c => keyedCol(t, c) && isLob(c.effType)).map(c =>
+  problem(c.line, `${db} can't make a key or index of ${c.name} (${c.effType}). Use vc instead.`)));
+
+// A foreign key's two sides must be of one family: family(type), null for a type that can't be linked at all
+function linkTypeProblems(tables, family, why) {
+  const problems = [];
+  for (const { c } of links(tables)) {
+    const tc = c.targetCol, where = `${c.target.name}.${tc.name}`;
+    const a = family(c.effType), b = family(tc.effType);
+    if (a === null || b === null) {
+      problems.push(problem(c.line, `${b === null ? where : c.name} is ${b === null ? tc.effType : c.effType}, ` +
+        'which can\'t be part of a foreign key. Use vc instead.'));
+    } else if (a !== b) {
+      problems.push(problem(c.line, `${c.name} is ${c.effType} but ${where} is ${tc.effType}. ${why}`));
+    }
+  }
+  return problems;
+}
 
 // ─── MariaDB and MySQL ───────────────────────────────────────────────────────
 // One script for both, with what differs in DIALECTS. UUID and INET are MariaDB 10.7+ only,
@@ -201,37 +222,20 @@ function genMariaDB(tables, D) {
 function mariadbProblems(tables) {
   const problems = links(tables).filter(({ c }) => !isKey(c)).map(({ c }) => problem(c.line,
     `${c.target.name}.${c.targetCol.name} is neither the primary key nor unique. The SQL adds an index on it, but normally it should be unique.`, 'warn'));
-  return [...problems, ...sameTypeProblems(tables)];
+  return [...problems, ...linkTypeProblems(tables, keyType, SAME_TYPE)];
 }
+const SAME_TYPE = 'A foreign key needs the same type on both sides.';
+const isLobType = t => /(text|blob)$|^json$/.test(typeParts(t).base);
 
 // MySQL 8.4 only links to a key, can't make a key of TEXT, and a key is at most 3072 bytes (768 characters)
 function mysqlProblems(tables) {
-  const problems = [...keyProblems(tables, 'MySQL'), ...sameTypeProblems(tables)];
+  const problems = [...keyProblems(tables, 'MySQL'), ...lobKeyProblems(tables, isLobType, 'MySQL'), ...linkTypeProblems(tables, keyType, SAME_TYPE)];
   for (const t of tables) {
     for (const c of t.cols) {
       const { base, args } = typeParts(c.effType);
-      const keyed = c.isPk || c.unique || t.multiUniques.some(u => u.cols.includes(c)) || t.indexes?.some(ix => ix.cols.includes(c.name));
-      if (!keyed) continue;
-      if (/(text|blob)$|^json$/.test(base)) problems.push(problem(c.line, `MySQL can't make a key or index of ${c.name} (${c.effType}). Use vc instead.`));
-      else if (/^(vc|varchar|char)$/.test(base) && +(args ?? DEFAULT_VC) > 768) {
+      if (keyedCol(t, c) && /^(vc|varchar|char)$/.test(base) && +(args ?? DEFAULT_VC) > 768) {
         problems.push(problem(c.line, `MySQL keys are at most 768 characters, and ${c.name} can hold ${args}. Use a shorter vc.`));
       }
-    }
-  }
-  return problems;
-}
-
-// MariaDB and MySQL: a foreign key's two sides need the same type, and TEXT can't be one
-function sameTypeProblems(tables) {
-  const problems = [];
-  for (const { c } of links(tables)) {
-    const tc = c.targetCol, where = `${c.target.name}.${tc.name}`;
-    const a = keyType(c.effType), b = keyType(tc.effType);
-    if (a === null || b === null) {
-      problems.push(problem(c.line, `${b === null ? where : c.name} is ${b === null ? tc.effType : c.effType}, ` +
-        'which can\'t be part of a foreign key. Use vc instead.'));
-    } else if (a !== b) {
-      problems.push(problem(c.line, `${c.name} is ${c.effType} but ${where} is ${tc.effType}. A foreign key needs the same type on both sides.`));
     }
   }
   return problems;
@@ -242,10 +246,10 @@ function sameTypeProblems(tables) {
 // except: an Id that numbers itself is INTEGER PRIMARY KEY, and an enum is TEXT with a CHECK.
 // Tables may point to tables made later, so they are made in key order only to read well.
 
-function genSQLite(tables) {
-  const D = DIALECTS.sqlite, Q = D.q;
+function genSQLite(tables, D) {
+  const Q = D.q;
   const { order, cyclic } = tablesOf(tables);
-  const out = ['-- SQLite', cyclic ? 'PRAGMA foreign_keys = OFF;' : 'PRAGMA foreign_keys = ON;', ''];
+  const out = ['-- ' + D.name, cyclic ? 'PRAGMA foreign_keys = OFF;' : 'PRAGMA foreign_keys = ON;', ''];
   if (!order.length) return out.join('\n');
   out.push(...[...order].reverse().map(t => `DROP TABLE IF EXISTS ${Q(t.name)};`), '');
   for (const t of order) {
@@ -265,9 +269,6 @@ function genSQLite(tables) {
   if (cyclic) out.push('PRAGMA foreign_keys = ON;', '');
   return out.join('\n');
 }
-
-const keyProblems = (tables, db) => links(tables).filter(({ c }) => !isKey(c)).map(({ c }) =>
-  problem(c.line, `${db} needs ${c.target.name}.${c.targetCol.name} to be the primary key or unique`));
 
 // ─── PostgreSQL ──────────────────────────────────────────────────────────────
 // Names are left unquoted (Postgres folds them to lower case) unless they are reserved.
@@ -327,16 +328,7 @@ const pgFamily = t => {
     : /^(NUMERIC|DECIMAL)\b/.test(s) ? 'numeric' : s.replace(/\(.*\)/, '');
 };
 
-function postgresProblems(tables) {
-  const problems = keyProblems(tables, 'PostgreSQL');
-  for (const { c } of links(tables)) {
-    const tc = c.targetCol;
-    if (pgFamily(c.effType) !== pgFamily(tc.effType)) {
-      problems.push(problem(c.line, `${c.name} is ${c.effType} but ${c.target.name}.${tc.name} is ${tc.effType}. PostgreSQL can't link them.`));
-    }
-  }
-  return problems;
-}
+const postgresProblems = tables => [...keyProblems(tables, 'PostgreSQL'), ...linkTypeProblems(tables, pgFamily, "PostgreSQL can't link them.")];
 
 // ─── SQL Server ──────────────────────────────────────────────────────────────
 // Text is NVARCHAR, so any language fits. An Id that numbers itself is IDENTITY(1,1).
@@ -357,13 +349,12 @@ function mssqlType(t) {
   if (base === 'enum') return `NVARCHAR(${Math.max(1, ...enumOptions(t).map(v => v.length))})`;
   return (unsigned && MSSQL_UNSIGNED[base]) || MSSQL_TYPES[base] || sqlType(t).replace(/ (UN)?SIGNED| ZEROFILL/g, '');
 }
-const enumOptions = t => [...(enumValues(t) ?? '').matchAll(/'((?:[^']|'')*)'/g)].map(m => m[1].replace(/''/g, "'"));
 const isMax = t => /\(MAX\)/.test(mssqlType(t));
 
-function genMSSQL(tables) {
-  const D = DIALECTS.mssql, Q = D.q;
+function genMSSQL(tables, D) {
+  const Q = D.q;
   const { order } = tablesOf(tables);
-  const out = ['-- SQL Server', ''];
+  const out = ['-- ' + D.name, ''];
   if (!order.length) return out.join('\n');
   // the keys added after their tables go first, or the tables they join can't be dropped
   const later = new Map(), made = new Set(); // column → its table
@@ -404,23 +395,12 @@ function genMSSQL(tables) {
 }
 
 function mssqlProblems(tables) {
-  const problems = keyProblems(tables, 'SQL Server');
-  const maxText = (c, what) => problems.push(problem(c.line, `SQL Server can't use ${c.name} (${c.effType}) ${what}. Use vc instead.`));
+  const problems = [...keyProblems(tables, 'SQL Server'), ...lobKeyProblems(tables, isMax, 'SQL Server'),
+    ...linkTypeProblems(tables, t => isMax(t) ? null : mssqlType(t), 'SQL Server needs the same type and length on both sides.')];
   for (const t of tables) {
     for (const c of t.cols) {
-      if (isMax(c.effType) && (c.isPk || c.unique || t.multiUniques.some(u => u.cols.includes(c)))) maxText(c, 'in a key');
-      else if (isMax(c.effType) && t.indexes?.some(ix => ix.cols.includes(c.name))) maxText(c, 'in an index');
-      else if (/^NVARCHAR\((\d+)\)/.test(mssqlType(c.effType)) && +mssqlType(c.effType).match(/\d+/)[0] > 850 && (c.isPk || c.unique)) {
-        problems.push(problem(c.line, `SQL Server keys are at most 1700 bytes, and ${c.name} can hold ${2 * +mssqlType(c.effType).match(/\d+/)[0]}. Use a shorter vc.`, 'warn'));
-      }
-    }
-  }
-  for (const { c } of links(tables)) {
-    const tc = c.targetCol;
-    if (isMax(c.effType) || isMax(tc.effType)) maxText(isMax(c.effType) ? c : tc, 'in a foreign key');
-    else if (mssqlType(c.effType) !== mssqlType(tc.effType)) {
-      problems.push(problem(c.line, `${c.name} is ${mssqlType(c.effType)} but ${c.target.name}.${tc.name} is ${mssqlType(tc.effType)}. ` +
-        'SQL Server needs the same type and length on both sides.'));
+      const n = +(mssqlType(c.effType).match(/^NVARCHAR\((\d+)\)/)?.[1] ?? 0);
+      if (n > 850 && (c.isPk || c.unique)) problems.push(problem(c.line, `SQL Server keys are at most 1700 bytes, and ${c.name} can hold ${2 * n}. Use a shorter vc.`, 'warn'));
     }
   }
   // "may cause cycles or multiple cascade paths": what a delete (or key update) starts may reach each table only once
@@ -483,25 +463,10 @@ function oracleSkipIndexes(tables) {
 }
 
 function oracleProblems(tables) {
-  const problems = keyProblems(tables, 'Oracle');
-  for (const t of tables) {
-    for (const c of t.cols) {
-      if (!isClob(c.effType)) continue;
-      const keyed = c.isPk || c.unique || t.multiUniques.some(u => u.cols.includes(c)) || t.indexes?.some(ix => ix.cols.includes(c.name));
-      if (keyed) problems.push(problem(c.line, `Oracle can't make a key or index of ${c.name} (${c.effType}). Use vc instead.`));
-    }
-  }
-  for (const { c } of links(tables)) {
-    const tc = c.targetCol, family = t => oracleType(t).replace(/\(.*\)/, ''); // lengths may differ, CHAR and VARCHAR2 may not
-    if (isClob(c.effType) || isClob(tc.effType)) {
-      const x = isClob(c.effType) ? c : tc;
-      problems.push(problem(c.line, `Oracle can't link ${x.name} (${x.effType}). Use vc instead.`));
-    } else if (family(c.effType) !== family(tc.effType)) {
-      problems.push(problem(c.line, `${c.name} is ${c.effType} but ${c.target.name}.${tc.name} is ${tc.effType}. Oracle can't link them.`));
-    }
-    if (c.onUpdate) problems.push(problem(c.line, `Oracle has no [update ${c.onUpdate}]: a key isn't meant to change there. Leave it out.`));
-  }
-  return problems;
+  const family = t => isClob(t) ? null : oracleType(t).replace(/\(.*\)/, ''); // lengths may differ, CHAR and VARCHAR2 may not
+  return [...keyProblems(tables, 'Oracle'), ...lobKeyProblems(tables, isClob, 'Oracle'), ...linkTypeProblems(tables, family, "Oracle can't link them."),
+    ...links(tables).filter(({ c }) => c.onUpdate).map(({ c }) =>
+      problem(c.line, `Oracle has no [update ${c.onUpdate}]: a key isn't meant to change there. Leave it out.`))];
 }
 
 // ─── The databases ───────────────────────────────────────────────────────────
@@ -510,31 +475,31 @@ function oracleProblems(tables) {
 
 const sqlStr = s => `'${s.replace(/'/g, "''")}'`;
 const upperBool = b => b ? 'TRUE' : 'FALSE';
+// What most of them have in common; each one says what differs
+const COMMON = {
+  maxName: 64, dqIdent: true, backslash: false, str: sqlStr, bool: upperBool, today: 'CURRENT_DATE',
+  action: a => a.toUpperCase(), dataStart: () => [], dataEnd: () => [],
+};
+const MARIADB = {
+  ...COMMON, name: 'MariaDB', q: quoter(MARIADB_RESERVED, '`'), dqIdent: false, backslash: true,
+  gen: genMariaDB, problems: mariadbProblems, str: s => sqlStr(s.replace(/\\/g, '\\\\')),
+  dataStart: () => ['SET FOREIGN_KEY_CHECKS = 0;'], dataEnd: () => ['SET FOREIGN_KEY_CHECKS = 1;'],
+};
 const DIALECTS = {
-  mariadb: {
-    name: 'MariaDB', q: quoter(MARIADB_RESERVED, '`'), maxName: 64, dqIdent: false, backslash: true,
-    gen: tables => genMariaDB(tables, DIALECTS.mariadb), problems: mariadbProblems,
-    str: s => sqlStr(s.replace(/\\/g, '\\\\')), bool: upperBool, today: 'CURRENT_DATE', action: a => a.toUpperCase(),
-    dataStart: () => ['SET FOREIGN_KEY_CHECKS = 0;'], dataEnd: () => ['SET FOREIGN_KEY_CHECKS = 1;'],
-  },
+  mariadb: MARIADB,
   mysql: {
-    name: 'MySQL', q: quoter(MYSQL_RESERVED, '`'), maxName: 64, dqIdent: false, backslash: true,
-    gen: tables => genMariaDB(tables, DIALECTS.mysql), problems: mysqlProblems,
-    str: s => sqlStr(s.replace(/\\/g, '\\\\')), bool: upperBool, today: 'CURRENT_DATE', action: a => a.toUpperCase(),
+    ...MARIADB, name: 'MySQL', q: quoter(MYSQL_RESERVED, '`'), problems: mysqlProblems,
     // a default other than a plain value, or on TEXT, BLOB or JSON, is an expression in parentheses
-    defaultFor: (c, v) => v === 'CURRENT_DATE' || /(text|blob)$|^json$/.test(typeParts(c.effType).base) ? `(${v})` : v,
-    dataStart: () => ['SET FOREIGN_KEY_CHECKS = 0;'], dataEnd: () => ['SET FOREIGN_KEY_CHECKS = 1;'],
+    defaultFor: (c, v) => v === 'CURRENT_DATE' || isLobType(c.effType) ? `(${v})` : v,
   },
   sqlite: {
-    name: 'SQLite', q: quoter(SQLITE_KEYWORDS, '"'), maxName: 64, dqIdent: true, backslash: false,
+    ...COMMON, name: 'SQLite', q: quoter(SQLITE_KEYWORDS, '"'),
     gen: genSQLite, problems: tables => keyProblems(tables, 'SQLite'), // SQLite doesn't compare the types
-    str: sqlStr, bool: upperBool, today: 'CURRENT_DATE', action: a => a.toUpperCase(),
     dataStart: () => ['PRAGMA foreign_keys = OFF;'], dataEnd: () => ['PRAGMA foreign_keys = ON;'],
   },
   postgres: {
-    name: 'PostgreSQL', q: quoter(POSTGRES_RESERVED, '"'), maxName: 63, dqIdent: true, backslash: false,
-    gen: tables => genPostgres(tables, DIALECTS.postgres), problems: postgresProblems, type: pgType, dropTail: 'CASCADE',
-    str: sqlStr, bool: upperBool, today: 'CURRENT_DATE', action: a => a.toUpperCase(),
+    ...COMMON, name: 'PostgreSQL', q: quoter(POSTGRES_RESERVED, '"'), maxName: 63,
+    gen: genPostgres, problems: postgresProblems, type: pgType, dropTail: 'CASCADE',
     // one transaction, so keys to tables made later are checked at the end; then numbering goes on after the sample Ids
     dataStart: () => ['BEGIN;'],
     dataEnd: order => ['COMMIT;', ...order.flatMap(t => t.cols.filter(c => c.autoInc).map(c => {
@@ -543,7 +508,7 @@ const DIALECTS = {
     }))],
   },
   mssql: {
-    name: 'SQL Server', q: quoter(MSSQL_RESERVED, '[', ']'), maxName: 128, dqIdent: true, backslash: false, nPrefix: true,
+    ...COMMON, name: 'SQL Server', q: quoter(MSSQL_RESERVED, '[', ']'), maxName: 128, nPrefix: true,
     gen: genMSSQL, problems: mssqlProblems,
     str: s => 'N' + sqlStr(s), bool: b => b ? '1' : '0', today: 'CAST(GETDATE() AS DATE)',
     bin: s => `CONVERT(VARBINARY(MAX), ${sqlStr(s)})`, // text doesn't turn into bytes by itself here
@@ -553,22 +518,20 @@ const DIALECTS = {
     // sample rows give their own Ids
     dataTable: t => t.cols.some(c => c.autoInc) ? [[`SET IDENTITY_INSERT ${DIALECTS.mssql.q(t.name)} ON;`], [`SET IDENTITY_INSERT ${DIALECTS.mssql.q(t.name)} OFF;`]] : [[], []],
   },
-};
-DIALECTS.oracle = {
-  name: 'Oracle', q: quoter(ORACLE_RESERVED, '"'), maxName: 128, dqIdent: true, backslash: false,
-  gen: tables => genPostgres(tables, DIALECTS.oracle), problems: oracleProblems,
-  type: oracleType, dropTail: 'CASCADE CONSTRAINTS', defaultFirst: true, skipIndexes: oracleSkipIndexes,
-  str: sqlStr, bool: upperBool, today: 'TRUNC(SYSDATE)',
-  action: a => /^(cascade|set null)$/.test(a) ? a.toUpperCase() : null, // RESTRICT and NO ACTION are what it does anyway
-  typed: (c, s) => /^date\b/.test(c.effType) ? `DATE ${sqlStr(s)}` : /^(datetime|timestamp)\b/.test(c.effType) ? `TIMESTAMP ${sqlStr(s)}` : undefined,
-  bin: s => `UTL_RAW.CAST_TO_RAW(${sqlStr(s)})`,
-  // one transaction, so keys to tables made later are checked at the end; then numbering goes on after the sample Ids
-  dataStart: () => [],
-  dataEnd: order => ['COMMIT;', ...order.flatMap(t => t.cols.filter(c => c.autoInc).map(c =>
-    `ALTER TABLE ${DIALECTS.oracle.q(t.name)} MODIFY ${DIALECTS.oracle.q(c.name)} GENERATED BY DEFAULT AS IDENTITY (START WITH LIMIT VALUE);`))],
+  oracle: {
+    ...COMMON, name: 'Oracle', q: quoter(ORACLE_RESERVED, '"'), maxName: 128,
+    gen: genPostgres, problems: oracleProblems, type: oracleType, dropTail: 'CASCADE CONSTRAINTS', defaultFirst: true, skipIndexes: oracleSkipIndexes,
+    today: 'TRUNC(SYSDATE)',
+    action: a => /^(cascade|set null)$/.test(a) ? a.toUpperCase() : null, // RESTRICT and NO ACTION are what it does anyway
+    typed: (c, s) => /^date\b/.test(c.effType) ? `DATE ${sqlStr(s)}` : /^(datetime|timestamp)\b/.test(c.effType) ? `TIMESTAMP ${sqlStr(s)}` : undefined,
+    bin: s => `UTL_RAW.CAST_TO_RAW(${sqlStr(s)})`,
+    // one transaction, so keys to tables made later are checked at the end; then numbering goes on after the sample Ids
+    dataEnd: order => ['COMMIT;', ...order.flatMap(t => t.cols.filter(c => c.autoInc).map(c =>
+      `ALTER TABLE ${DIALECTS.oracle.q(t.name)} MODIFY ${DIALECTS.oracle.q(c.name)} GENERATED BY DEFAULT AS IDENTITY (START WITH LIMIT VALUE);`))],
+  },
 };
 const dialectOf = d => DIALECTS[d] ?? DIALECTS.mariadb;
 
-function genSQL(tables, dialect = 'mariadb') { return dialectOf(dialect).gen(tables); }
+function genSQL(tables, dialect = 'mariadb') { const D = dialectOf(dialect); return D.gen(tables, D); }
 // What the database refuses (or warns about) in the diagram
 function dialectProblems(tables, dialect = 'mariadb') { return dialectOf(dialect).problems(tables); }

@@ -5,8 +5,7 @@
 // and values fit their columns.
 // Run: node test/sample-check.js
 
-const fs = require('fs'), path = require('path'), vm = require('vm');
-const js = f => fs.readFileSync(path.join(__dirname, '..', 'js', f + '.js'), 'utf8');
+const vm = require('vm');
 
 const MORE = {
   'shop (en)': `Student
@@ -162,9 +161,8 @@ Gizmo
 `,
 };
 
-const ctx = { console, document: { querySelector: () => null }, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, onSampleData() {}, state: { sampleLang: null } };
-vm.createContext(ctx);
-vm.runInContext(['model', 'dialects', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') + `
+const ctx = require('./load')({ process, MORE });
+vm.runInContext(`
 K = prepareKinds(SAMPLE_KINDS);
 let failures = 0;
 const fail = (where, msg) => { failures++; console.log('FAIL', where + ':', msg); };
@@ -197,4 +195,4 @@ for (const [name, src] of Object.entries({ ...EXAMPLES, ...MORE })) for (const c
 }
 console.log(failures ? failures + ' problems' : 'sample data ok: ' + Object.keys({ ...EXAMPLES, ...MORE }).length + ' schemas');
 process.exitCode = failures ? 1 : 0;
-`, Object.assign(ctx, { process, MORE }));
+`, ctx);

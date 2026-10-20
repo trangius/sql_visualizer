@@ -17,7 +17,6 @@
 // Run: node test/sql-check.js
 
 const fs = require('fs'), path = require('path'), vm = require('vm'), { spawnSync } = require('child_process');
-const js = f => fs.readFileSync(path.join(__dirname, '..', 'js', f + '.js'), 'utf8');
 
 // Simple syntax or SQL (MariaDB's unless a third item says which), and the problem it must
 // report, if any: the same for every database, or { mariadb, sqlite, postgres, mssql }
@@ -55,7 +54,7 @@ Pet
 Note
   Id
   TagBody -> Tag.Body
-`, { mariadb: "Tag.Body is text, which can't be part of a foreign key", mysql: "MySQL can't make a key or index of Body", oracle: "Oracle can't make a key or index of Body", mssql: "SQL Server can't use Body (text)" }],
+`, { mariadb: "Tag.Body is text, which can't be part of a foreign key", mysql: "MySQL can't make a key or index of Body", oracle: "Oracle can't make a key or index of Body", mssql: "SQL Server can't make a key or index of Body" }],
   'fk between strings of different lengths': [`Country
   Code char(2) pk
 City
@@ -185,7 +184,7 @@ ALTER TABLE Course ADD CONSTRAINT course_ibfk_1 FOREIGN KEY (TeacherId) REFERENC
 CREATE TABLE IF NOT EXISTS "Author" ("Id" INTEGER PRIMARY KEY AUTOINCREMENT, [Name] TEXT NOT NULL, "Note", Born DATE DEFAULT CURRENT_DATE);
 CREATE TABLE "Order" (Id INTEGER PRIMARY KEY, "Group" TEXT NOT NULL CHECK ("Group" IN ('a', 'b''c')), AuthorId INTEGER REFERENCES Author(Id) ON DELETE CASCADE) WITHOUT ROWID;
 CREATE INDEX ix_name ON Author (Name);
-CREATE INDEX ix_name2 ON "Order" (AuthorId);`, { oracle: "Oracle can't make a key or index of Name", mysql: "MySQL can't make a key or index of Name", mssql: "SQL Server can't use Name (text) in an index" }, 'sqlite'],
+CREATE INDEX ix_name2 ON "Order" (AuthorId);`, { oracle: "Oracle can't make a key or index of Name", mysql: "MySQL can't make a key or index of Name", mssql: "SQL Server can't make a key or index of Name" }, 'sqlite'],
   'PostgreSQL script': [`SET statement_timeout = 0;
 SELECT pg_catalog.set_config('search_path', '', false);
 CREATE TABLE public.author (
@@ -249,14 +248,9 @@ const sqlcmd = ['sqlcmd', '/opt/mssql-tools18/bin/sqlcmd'].find(has);
 const client = findClient(), sqlite = has('sqlite3'), psql = has('psql'), user = process.env.MYSQL_USER ?? 'root';
 const db = sql => spawnSync(client, ['-u' + user, '--batch'], { input: sql, encoding: 'utf8' }); // a password goes in MYSQL_PWD
 
-const ctx = { console, document: { querySelector: () => null }, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, onSampleData() {}, state: { sampleLang: null } };
-vm.createContext(ctx);
-vm.runInContext(['model', 'dialects', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') +
-  '\nloadScript = async () => {}; // the sample files are already loaded', ctx);
-
-const DIALECTS = ['mariadb', 'mysql', 'sqlite', 'postgres', 'mssql', 'oracle'];
+const ctx = require('./load')();
+const DIALECTS = vm.runInContext('DIALECTS', ctx), DBS = Object.keys(DIALECTS), NAME = d => DIALECTS[d].name;
 const LOSSY = new Set(['every type']); // types written another way: uuid is CHAR(36) in MariaDB
-const NAMES = { mariadb: 'MariaDB', mysql: 'MySQL', sqlite: 'SQLite', postgres: 'PostgreSQL', mssql: 'SQL Server', oracle: 'Oracle' };
 const parse = vm.runInContext(`(src, sql, dialect) => {
   const r = sql ? parseSQL(src, dialect) : parseText(src);
   r.problems.push(...resolve(r.tables), ...dialectProblems(r.tables, dialect));
@@ -305,14 +299,14 @@ const RUN = {
   const ping = client && db('SELECT 1');
   const run = { mariadb: ping && !ping.status, mysql: !!process.env.MYSQL8 && has(process.env.MYSQL8), sqlite, postgres: psql, mssql: !!sqlcmd && !!process.env.SQLCMDPASSWORD,
     oracle: !!process.env.SQLPLUS && !!process.env.ORACLE_PWD };
-  for (const d of DIALECTS) if (!run[d]) console.log(`${NAMES[d]}: no server or client found, its scripts are only generated, not run.`);
+  for (const d of DBS) if (!run[d]) console.log(`${NAME(d)}: no server or client found, its scripts are only generated, not run.`);
   const only = process.argv[2]; // a part of a schema's name, to check just those
   const all = Object.fromEntries(Object.entries({ ...Object.fromEntries(Object.entries(vm.runInContext('EXAMPLES', ctx)).map(([k, v]) => [k, [v]])), ...CASES })
     .filter(([k]) => !only || k.includes(only)));
   for (const [name, [src, expects, from = 'mariadb']] of Object.entries(all)) {
     const sql = /^\s*(CREATE|PRAGMA|SET)\b/i.test(src);
-    for (const dialect of DIALECTS) {
-      const where = `${name} (${NAMES[dialect]})`, expect = typeof expects === 'string' ? expects : expects?.[dialect];
+    for (const dialect of DBS) {
+      const where = `${name} (${NAME(dialect)})`, expect = typeof expects === 'string' ? expects : expects?.[dialect];
       // SQL is read as written, then written for each database
       const r = parse(src, sql, sql ? from : dialect);
       if (sql && from !== dialect) r.problems.push(...vm.runInContext('dialectProblems', ctx)(r.tables, dialect));
@@ -336,7 +330,7 @@ const RUN = {
       else if (dialect === 'sqlite' && res.stdout.trim()) fail(where, 'sample data breaks a foreign key: ' + res.stdout.trim());
     }
   }
-  const ran = DIALECTS.filter(d => run[d]).map(d => NAMES[d]);
+  const ran = DBS.filter(d => run[d]).map(NAME);
   console.log(failures ? failures + ' problems' : `sql ok: ${Object.keys(all).length} schemas${ran.length ? ', run on ' + ran.join(', ') : ''}`);
   process.exitCode = failures ? 1 : 0;
 })();

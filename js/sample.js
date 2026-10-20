@@ -153,9 +153,8 @@ const kindById = id => K.kinds.find(k => k.id === id);
 // K.person for what people have, K.generic for the rest.
 
 function typeInfo(c) {
-  const t = c.effType, base = t.split(/[ (]/)[0], args = t.match(/\(([^)]*)\)/)?.[1].split(',').map(Number) ?? [];
+  const t = c.effType, { base, args: a, unsigned } = typeParts(t), args = a?.split(',').map(Number) ?? [];
   const len = /^(vc|char|varchar)$/.test(base) ? (args[0] || (base === 'vc' ? DEFAULT_VC : base === 'char' ? 1 : 0)) : 0;
-  const unsigned = /unsigned/.test(t);
   const bits = { tinyint: 7, smallint: 15, mediumint: 23, int: 31, integer: 31, bigint: 31 }[base];
   return {
     base,
@@ -168,7 +167,7 @@ function typeInfo(c) {
     prec: /^(decimal|dec|numeric|fixed)$/.test(base) ? args[0] || 10 : 15,
     date: /^(date|datetime|timestamp)$/.test(base),
     time: base === 'time',
-    options: base === 'enum' || base === 'set' ? [...t.matchAll(/'((?:[^']|'')*)'/g)].map(m => m[1].replace(/''/g, "'")) : null,
+    options: base === 'enum' || base === 'set' ? enumOptions(t) : null,
   };
 }
 // Is a column's value written without quotes in SQL?
@@ -365,7 +364,7 @@ function tableRows(t, n, lang, plans) {
     const price = t.cols.find(c => !c.target && plans.get(c).field === 'price');
     for (const c of t.cols) {
       if (c.target || plans.get(c).field === 'total') continue;
-      values.set(c, c.isPk && t.pkCols.length === 1 && typeInfo(c).int ? String(i + 1) : optional(c) ? null : sampleValue(t, c, i, ctx));
+      values.set(c, solePk(t, c) && typeInfo(c).int ? String(i + 1) : optional(c) ? null : sampleValue(t, c, i, ctx));
     }
     if (qty && price && values.get(qty) != null && values.get(price) != null) ctx.total = +values.get(qty) * +values.get(price);
     for (const c of t.cols) if (!c.target && plans.get(c).field === 'total') values.set(c, sampleValue(t, c, i, ctx));
@@ -377,7 +376,7 @@ function tableRows(t, n, lang, plans) {
 // The sets of columns whose values may not repeat: the primary key, unique columns, unique (…)
 const uniqueSets = t => [
   ...(t.pkCols.length ? [t.pkCols] : []),
-  ...t.cols.filter(c => c.unique && !(t.pkCols.length === 1 && t.pkCols[0] === c)).map(c => [c]),
+  ...t.cols.filter(c => c.unique && !solePk(t, c)).map(c => [c]),
   ...(t.multiUniques ?? []).map(u => u.cols),
 ];
 const tupleKey = (r, cols) => cols.some(c => r.values.get(c) == null) ? null : cols.map(c => r.values.get(c)).join('\u0000');

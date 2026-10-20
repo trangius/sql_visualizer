@@ -108,6 +108,7 @@ const SAMPLE_KINDS = {
       "ssn": {"en":"^ssn$|^nino$|insurancenumber|personalnumber","sv":"person(nummer|nr)|^pnr$"},
       "phone": {"en":"phone|mobile|^tel$|cell","sv":"telefon|mobil"},
       "postcode": {"en":"zip|postal|postcode","sv":"postnr|postnummer"},
+      "region": {"en":"^(region|county|state|province)$","sv":"^(lan|region|landskap)$"},
       "birth": {"en":"born|birth|dob","sv":"fodd"},
       "age": {"en":"^age$","sv":"alder"},
       "gender": {"en":"gender|^sex$","sv":"^kon$"}

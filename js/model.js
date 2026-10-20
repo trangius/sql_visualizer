@@ -38,6 +38,14 @@ function normType(t) {
   return s.replace(/^integer\b/, 'int').replace(/^(tinyint|smallint|mediumint|int|bigint)\(\d+\)/, '$1');
 }
 
+// A type as its parts: "decimal(8,2) unsigned" → { base: 'decimal', args: '8,2', rest: ' unsigned', unsigned: true }
+function typeParts(t) {
+  const m = t.match(/^(\w+)(?:\(([^)]*)\))?(.*)$/);
+  return { base: m[1], args: m[2] ?? null, rest: m[3], unsigned: /\bunsigned\b/.test(m[3]) };
+}
+// The values of enum('S','M','L') or set(…), unquoted
+const enumOptions = t => [...(t.match(/^(enum|set)\((.*)\)$/)?.[2] ?? '').matchAll(/'((?:[^']|'')*)'/g)].map(m => m[1].replace(/''/g, "'"));
+
 function sqlType(t) {
   const m = t.match(/^vc(?:\((\d+)\))?(?=$|\s)(.*)$/);
   const up = s => outsideQuotes(s, s => s.toUpperCase());
@@ -200,6 +208,10 @@ function parseText(src) {
 
 // ─── Resolve: primary keys, arrows, default types ────────────────────────────
 
+// Is c on its own the primary key of t? A foreign key to such a column is written "-> Table"
+const solePk = (t, c) => t.pkCols.length === 1 && t.pkCols[0] === c;
+const pointsToPk = c => solePk(c.target, c.targetCol);
+
 // An FK column without a type gets the type of the column it points to
 function defaultType(c, seen = new Set()) {
   if (isIdName(c.name)) return 'int';
@@ -225,9 +237,9 @@ const FLAG_WORDS = ['pk', 'null', 'unique'];
 const INT_SIZE = { tinyint: 'tinyint', bool: 'tinyint', boolean: 'tinyint', smallint: 'smallint',
   mediumint: 'mediumint', int: 'int', integer: 'int', bigint: 'bigint', serial: 'bigint' };
 function keyType(t) {
-  const [, base, args, rest] = t.match(/^(\w+)(\([^)]*\))?(.*)$/);
-  if (base in INT_SIZE) return INT_SIZE[base] + (base === 'serial' || /\bunsigned\b/.test(rest) ? ' unsigned' : '');
-  if (/^(decimal|dec|numeric|fixed)$/.test(base)) return 'decimal' + (args ?? '(10)').replace(/^\((\d+)\)$/, '($1,0)') + rest;
+  const { base, args, rest, unsigned } = typeParts(t);
+  if (base in INT_SIZE) return INT_SIZE[base] + (base === 'serial' || unsigned ? ' unsigned' : '');
+  if (/^(decimal|dec|numeric|fixed)$/.test(base)) return `decimal(${(args ?? '10').replace(/^(\d+)$/, '$1,0')})` + rest;
   if (/^(vc|varchar|char)$/.test(base)) return 'string';
   if (/^(binary|varbinary)$/.test(base)) return 'binary';
   if (/(text|blob)$|^json$/.test(base)) return null;
@@ -312,7 +324,7 @@ function resolve(tables, implicit = false) {
     const keys = [...(t.pkCols.length > 1 ? [{ cols: t.pkCols, line: t.pkLine?.line ?? t.pkCols[1].line, what: 'pk' }] : []),
       ...t.multiUniques.map(u => ({ ...u, what: 'unique' }))];
     for (const k of keys) {
-      const alone = k.cols.find(c => c.unique || (t.pkCols.length === 1 && t.pkCols[0] === c));
+      const alone = k.cols.find(c => c.unique || solePk(t, c));
       const hasPk = k.what === 'unique' && t.pkCols.length > 1 && t.pkCols.every(c => k.cols.includes(c));
       if (alone || hasPk) problems.push(problem(k.line, `${alone ? alone.name : 'The primary key'} is already unique by itself, ` +
         `so ${k.what} (${k.cols.map(c => c.name).join(', ')}) adds nothing`, 'warn'));
@@ -354,7 +366,7 @@ function resolve(tables, implicit = false) {
       }
       c.isPk = t.pkCols.includes(c);
       c.indexed = false;
-      c.autoInc = c.isPk && t.pkCols.length === 1 && isIdName(c.name) && INT_TYPES.has(c.effType.split(/[ (]/)[0]);
+      c.autoInc = solePk(t, c) && isIdName(c.name) && INT_TYPES.has(typeParts(c.effType).base);
       if (c.isPk && c.nullable) problems.push(problem(c.line, `${c.name} is a primary key and can't be null`));
     }
   }
@@ -389,8 +401,7 @@ function resolve(tables, implicit = false) {
 // "-> Table" when it points to the table's (single) primary key, otherwise "-> Table.Column"
 function refText(c) {
   if (!c.target) return c.ref + (c.refCol ? '.' + c.refCol : '');
-  const pk = c.target.pkCols.length === 1 && c.target.pkCols[0] === c.targetCol;
-  return c.target.name + (pk ? '' : '.' + c.targetCol.name);
+  return c.target.name + (pointsToPk(c) ? '' : '.' + c.targetCol.name);
 }
 
 function genText(tables, notes) {
