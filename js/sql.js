@@ -241,7 +241,7 @@ function fkActions(p) {
 
 // The value after DEFAULT, as Simple writes it: 0, 'text', null, true, now, or (an expression)
 const NOW_WORDS = ['CURRENT_TIMESTAMP', 'NOW', 'LOCALTIMESTAMP', 'LOCALTIME', 'CURRENT_DATE', 'CURDATE', 'GETDATE',
-  'SYSDATETIME', 'GETUTCDATE', 'SYSUTCDATETIME'];
+  'SYSDATETIME', 'GETUTCDATE', 'SYSUTCDATETIME', 'SYSDATE', 'SYSTIMESTAMP'];
 function readDefault(p) {
   if (p.isP('(')) { // SQL Server writes ((0)) and (getdate())
     const g = p.group(), inner = new Cursor(g), v = g.length ? readDefault(inner) : null;
@@ -250,11 +250,12 @@ function readDefault(p) {
   const neg = p.isP('-') ? p.next().v : '', x = p.next();
   if (!x) return null;
   if (x.t === 'str') return tokText([x]);
+  if (['DATE', 'TIMESTAMP', 'TIME'].includes(x.u) && p.peek()?.t === 'str') return tokText([p.next()]); // DATE '2024-01-31'
   let v = neg + x.v;
   if (/^\d/.test(x.v) && p.isP('.')) { p.next(); v += '.' + (p.isW() ? p.next().v : ''); }
   const args = p.isP('(') ? p.group() : null; // NOW(), CURRENT_TIMESTAMP(3)
   if (/^-?\d/.test(v)) return v;
-  if (NOW_WORDS.includes(x.u) || (x.u === 'CAST' && NOW_WORDS.includes(args?.[0]?.u))) return 'now'; // CAST(GETDATE() AS DATE)
+  if (NOW_WORDS.includes(x.u) || (['CAST', 'TRUNC'].includes(x.u) && NOW_WORDS.includes(args?.[0]?.u))) return 'now'; // CAST(GETDATE() AS DATE), TRUNC(SYSDATE)
   if (['NULL', 'TRUE', 'FALSE'].includes(x.u)) return x.u.toLowerCase();
   return '(' + v + (args ? '(' + tokText(args) + ')' : '') + ')';
 }
@@ -306,7 +307,7 @@ function parseColumn(p, acc, warn, error) {
     }
     if (p.eatW('CHECK')) {
       const values = enumCheck(p.group(), col.name);
-      if (values && /^(text|n?varchar|n?char)\b/i.test(col.type ?? 'text')) col.type = `enum(${values})`; // how the others write an enum
+      if (values && /^(text|n?varchar2?|n?char)\b/i.test(col.type ?? 'text')) col.type = `enum(${values})`; // how the others write an enum
       else warn(line, 'CHECK constraints are not shown. Ignored.');
       continue;
     }
@@ -329,6 +330,12 @@ const READ_TYPES = {
     [/^(varbinary\(max\)|image)$/, 'blob'], [/^(datetime2|datetimeoffset|smalldatetime)(\(\d+\))?$/, 'datetime'],
     [/^bit$/, 'bool'], [/^uniqueidentifier$/, 'uuid'], [/^money$/, 'decimal(19,4)'], [/^smallmoney$/, 'decimal(10,4)'],
     [/^float(\(\d+\))?$/, 'double'], [/^real$/, 'float'], [/^xml$/, 'text'], [/^sysname$/, 'vc']],
+  oracle: [[/^n?varchar2?\((\d+)\s*(char|byte)?\)$/, 'varchar($1)'], [/^n?char\((\d+)\s*(char|byte)?\)$/, 'char($1)'],
+    // NUMBER(p): the integer that holds p digits; NUMBER(p,s) a decimal; NUMBER alone, mostly a whole number
+    [/^number\((\d+)\)$/, (m, p) => [[3, 'tinyint'], [4, 'year'], [5, 'smallint'], [7, 'mediumint'], [10, 'int'], [19, 'bigint']].find(([n]) => +p <= n)?.[1] ?? `decimal(${p})`],
+    [/^number\((\d+),(\d+)\)$/, 'decimal($1,$2)'], [/^(number|integer|int)$/, 'int'], [/^binary_float$/, 'float'],
+    [/^binary_double$/, 'double'], [/^(n?clob|long)$/, 'text'], [/^(long raw|bfile)$/, 'blob'], [/^raw\((\d+)\)$/, 'varbinary($1)'],
+    [/^timestamp\(\d+\)$/, 'timestamp'], [/^timestamp( with( local)? time zone)?$/, 'timestamp']],
 };
 function readType(t, dialect) {
   if (!t) return t;

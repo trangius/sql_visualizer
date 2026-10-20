@@ -525,7 +525,7 @@ async function sampleInserts(tables, dialect = 'mariadb') {
   }
   const data = sampleData(tables, 20);
   const lit = (c, v) => v == null ? 'NULL' : typeInfo(c).bool ? D.bool(v !== '0') : isNumeric(c) ? v
-    : /^(var)?binary|blob$/.test(typeInfo(c).base) && D.bin ? D.bin(v) : D.str(v);
+    : /^(var)?binary|blob$/.test(typeInfo(c).base) && D.bin ? D.bin(v) : D.typed?.(c, v) ?? D.str(v);
   const { order, cyclic } = topoOrder(tables.filter(t => t.cols.length));
   const out = ['-- Sample data (made up)', ...D.dataStart(order, cyclic)];
   for (const t of order) {

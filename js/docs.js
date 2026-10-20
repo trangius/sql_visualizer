@@ -206,10 +206,13 @@ const DIALECT_SIGNS = {
   mssql: /\[dbo\]|\bIDENTITY\s*\(|\bN?VARCHAR\s*\(\s*MAX\b|\bNVARCHAR\b|\bDATETIME2\b|\bUNIQUEIDENTIFIER\b|^\s*GO\s*$/im,
   postgres: /\b(BIG)?SERIAL\b|\bBYTEA\b|\bJSONB\b|\bTIMESTAMPTZ\b|::|\bAS\s+IDENTITY\b|\bpg_catalog\b/i,
   sqlite: /\bAUTOINCREMENT\b|\bPRAGMA\b|\bWITHOUT\s+ROWID\b/i,
+  oracle: /\bVARCHAR2\b|\bNUMBER\s*\(|\bSYSDATE\b|\bCASCADE\s+CONSTRAINTS\b|\bCLOB\b/i,
 };
-const guessDialect = src => /^-- MySQL dump|utf8mb4_0900_/im.test(src) ? 'mysql'
+// A script written here starts with "-- Oracle", "-- PostgreSQL"…: that line says it outright
+const ownHeader = src => Object.keys(DIALECTS).find(d => src.startsWith('-- ' + DIALECTS[d].name + '\n'));
+const guessDialect = src => ownHeader(src) ?? (/^-- MySQL dump|utf8mb4_0900_/im.test(src) ? 'mysql'
   : /`|\bAUTO_INCREMENT\b|\bENGINE\s*=/i.test(src) ? 'mariadb'
-  : Object.keys(DIALECT_SIGNS).find(d => DIALECT_SIGNS[d].test(src)) ?? 'mariadb';
+  : Object.keys(DIALECT_SIGNS).find(d => DIALECT_SIGNS[d].test(src)) ?? 'mariadb');
 
 // Open a .sql or text file in a new tab, from the button or dropped on the page
 async function openFile(file) {

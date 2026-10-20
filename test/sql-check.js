@@ -8,9 +8,12 @@
 //   SQLite      sqlite3, in memory
 //   PostgreSQL  psql, as the current user
 //   SQL Server  sqlcmd (or /opt/mssql-tools18/bin/sqlcmd) as sa, with the password in SQLCMDPASSWORD
+//   Oracle      SQLPLUS=path/to/sqlplus, as SYSTEM with the password in ORACLE_PWD, on //localhost/FREEPDB1;
+//               each script runs as a new user, sqlviz_check
 // What a database would refuse must be reported as a problem instead. Reading a generated
 // script back and writing it again must give the same script, and for MariaDB and SQLite
-// the same Simple text. test/linux-setup.sh installs all five on Ubuntu.
+// the same Simple text. test/linux-setup.sh installs five of them on Ubuntu, test/oracle-setup.sh
+// Oracle on Oracle Linux.
 // Run: node test/sql-check.js
 
 const fs = require('fs'), path = require('path'), vm = require('vm'), { spawnSync } = require('child_process');
@@ -25,7 +28,7 @@ const CASES = {
 Pet
   Id
   OwnerEmail -> Owner.Email
-`, { mysql: 'MySQL needs Owner.Email', sqlite: 'SQLite needs Owner.Email to be the primary key or unique', postgres: 'PostgreSQL needs Owner.Email', mssql: 'SQL Server needs Owner.Email' }],
+`, { oracle: 'Oracle needs Owner.Email', mysql: 'MySQL needs Owner.Email', sqlite: 'SQLite needs Owner.Email to be the primary key or unique', postgres: 'PostgreSQL needs Owner.Email', mssql: 'SQL Server needs Owner.Email' }],
   'fk to the second column of a key': [`OrderLine
   OrderNo int
   LineNo int
@@ -33,7 +36,7 @@ Pet
 Shipment
   Id
   LineNo -> OrderLine.LineNo
-`, { mysql: 'MySQL needs OrderLine.LineNo', sqlite: 'SQLite needs OrderLine.LineNo', postgres: 'PostgreSQL needs', mssql: 'SQL Server needs' }],
+`, { oracle: 'Oracle needs OrderLine.LineNo', mysql: 'MySQL needs OrderLine.LineNo', sqlite: 'SQLite needs OrderLine.LineNo', postgres: 'PostgreSQL needs', mssql: 'SQL Server needs' }],
   'fk of another integer type': [`Owner
   Id
 Pet
@@ -52,13 +55,13 @@ Pet
 Note
   Id
   TagBody -> Tag.Body
-`, { mariadb: "Tag.Body is text, which can't be part of a foreign key", mysql: "MySQL can't make a key or index of Body", mssql: "SQL Server can't use Body (text)" }],
+`, { mariadb: "Tag.Body is text, which can't be part of a foreign key", mysql: "MySQL can't make a key or index of Body", oracle: "Oracle can't make a key or index of Body", mssql: "SQL Server can't use Body (text)" }],
   'fk between strings of different lengths': [`Country
   Code char(2) pk
 City
   Id
   Country vc(2) -> Country
-`, { mssql: 'SQL Server needs the same type' }],
+`, { mssql: 'SQL Server needs the same type', oracle: "Oracle can't link them" }],
   'delete, update and default': [`Owner
   Id
   Name vc(50) [default 'Anna ''Ann'' #1']  # comment
@@ -72,7 +75,7 @@ Pet
   Weight decimal(5,2) [default -1.50]
   Alive bool [default true]
   Tag vc(20) null [default null]
-`, { mssql: 'SQL Server refuses [delete set null] here' }],
+`, { mssql: 'SQL Server refuses [delete set null] here', oracle: 'Oracle has no [update cascade]' }],
   'cascades': [`Owner
   Id
   Name
@@ -86,7 +89,7 @@ Visit
   At datetime [default now]
   Paid bool [default false]
   Fee decimal(6,2) [default 0]
-`],
+`, { oracle: 'Oracle has no [update cascade]' }],
   'cascade to itself': [`Person
   Id
   ParentId null -> Person [delete set null]
@@ -150,7 +153,7 @@ Pet
 Other
   Id
   Ref int -> AVeryLongTableNameThatGoesOnAndOnAndOnForever.AnotherExtremelyLongColumnNameNumberTwo
-`, { mysql: 'MySQL needs', sqlite: 'SQLite needs', postgres: 'PostgreSQL needs', mssql: 'SQL Server needs' }],
+`, { oracle: 'Oracle needs', mysql: 'MySQL needs', sqlite: 'SQLite needs', postgres: 'PostgreSQL needs', mssql: 'SQL Server needs' }],
   'keywords as names': [`Order
   Id
   Group vc(20) unique
@@ -182,7 +185,7 @@ ALTER TABLE Course ADD CONSTRAINT course_ibfk_1 FOREIGN KEY (TeacherId) REFERENC
 CREATE TABLE IF NOT EXISTS "Author" ("Id" INTEGER PRIMARY KEY AUTOINCREMENT, [Name] TEXT NOT NULL, "Note", Born DATE DEFAULT CURRENT_DATE);
 CREATE TABLE "Order" (Id INTEGER PRIMARY KEY, "Group" TEXT NOT NULL CHECK ("Group" IN ('a', 'b''c')), AuthorId INTEGER REFERENCES Author(Id) ON DELETE CASCADE) WITHOUT ROWID;
 CREATE INDEX ix_name ON Author (Name);
-CREATE INDEX ix_name2 ON "Order" (AuthorId);`, { mysql: "MySQL can't make a key or index of Name", mssql: "SQL Server can't use Name (text) in an index" }, 'sqlite'],
+CREATE INDEX ix_name2 ON "Order" (AuthorId);`, { oracle: "Oracle can't make a key or index of Name", mysql: "MySQL can't make a key or index of Name", mssql: "SQL Server can't use Name (text) in an index" }, 'sqlite'],
   'PostgreSQL script': [`SET statement_timeout = 0;
 SELECT pg_catalog.set_config('search_path', '', false);
 CREATE TABLE public.author (
@@ -251,9 +254,9 @@ vm.createContext(ctx);
 vm.runInContext(['model', 'dialects', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') +
   '\nloadScript = async () => {}; // the sample files are already loaded', ctx);
 
-const DIALECTS = ['mariadb', 'mysql', 'sqlite', 'postgres', 'mssql'];
+const DIALECTS = ['mariadb', 'mysql', 'sqlite', 'postgres', 'mssql', 'oracle'];
 const LOSSY = new Set(['every type']); // types written another way: uuid is CHAR(36) in MariaDB
-const NAMES = { mariadb: 'MariaDB', mysql: 'MySQL', sqlite: 'SQLite', postgres: 'PostgreSQL', mssql: 'SQL Server' };
+const NAMES = { mariadb: 'MariaDB', mysql: 'MySQL', sqlite: 'SQLite', postgres: 'PostgreSQL', mssql: 'SQL Server', oracle: 'Oracle' };
 const parse = vm.runInContext(`(src, sql, dialect) => {
   const r = sql ? parseSQL(src, dialect) : parseText(src);
   r.problems.push(...resolve(r.tables), ...dialectProblems(r.tables, dialect));
@@ -285,13 +288,23 @@ const RUN = {
     const res = sc(['-d', 'sqlviz_check', '-i', tmp]);
     return { status: res.status, stderr: res.status ? res.stdout + res.stderr : '' }; // sqlcmd writes its errors to stdout
   },
+  oracle: script => {
+    const at = '@//localhost:1521/FREEPDB1', pw = process.env.ORACLE_PWD;
+    // DEFINE OFF: & in the sample data is text, not a variable to ask for
+    const sp = (login, input) => spawnSync(process.env.SQLPLUS, ['-S', '-L', login], { encoding: 'utf8',
+      input: `SET DEFINE OFF\nWHENEVER SQLERROR EXIT FAILURE\n${input}\nEXIT\n`, env: { ...process.env, NLS_LANG: '.AL32UTF8' } });
+    const made = sp(`system/${pw}${at}`, `DROP USER IF EXISTS sqlviz_check CASCADE;\nCREATE USER sqlviz_check IDENTIFIED BY "${pw}" QUOTA UNLIMITED ON USERS;\nGRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE TO sqlviz_check;`);
+    const res = made.status ? made : sp(`sqlviz_check/"${pw}"${at}`, script);
+    return { status: res.status, stderr: res.status ? res.stdout + res.stderr : '' }; // sqlplus writes its errors to stdout
+  },
 };
 
 (async () => {
   let failures = 0;
   const fail = (where, msg) => { failures++; console.log('FAIL', where + ':', msg); };
   const ping = client && db('SELECT 1');
-  const run = { mariadb: ping && !ping.status, mysql: !!process.env.MYSQL8 && has(process.env.MYSQL8), sqlite, postgres: psql, mssql: !!sqlcmd && !!process.env.SQLCMDPASSWORD };
+  const run = { mariadb: ping && !ping.status, mysql: !!process.env.MYSQL8 && has(process.env.MYSQL8), sqlite, postgres: psql, mssql: !!sqlcmd && !!process.env.SQLCMDPASSWORD,
+    oracle: !!process.env.SQLPLUS && !!process.env.ORACLE_PWD };
   for (const d of DIALECTS) if (!run[d]) console.log(`${NAMES[d]}: no server or client found, its scripts are only generated, not run.`);
   const only = process.argv[2]; // a part of a schema's name, to check just those
   const all = Object.fromEntries(Object.entries({ ...Object.fromEntries(Object.entries(vm.runInContext('EXAMPLES', ctx)).map(([k, v]) => [k, [v]])), ...CASES })
