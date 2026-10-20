@@ -502,9 +502,16 @@ tdName.addEventListener('input', () => {
 });
 dlgEl.addEventListener('pointerdown', e => { if (e.target === dlgEl) closeTableEditor(); });
 
+// Esc closes the chooser if it is open, else the dialog: from anywhere, since the focus leaves
+// the dialog when the row it was in is re-rendered (the chooser's own keys are handled below)
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || dlgEl.hidden || e.target.closest('.fk-panel')) return;
+  e.preventDefault();
+  if (dlg.fk) closeFk(); else closeTableEditor();
+});
+
 dlgEl.addEventListener('keydown', e => {
   if (e.target.closest('.fk-panel')) return fkKeydown(e);
-  if (e.key === 'Escape') { e.preventDefault(); closeTableEditor(); return; }
   if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || e.target.type === 'checkbox') return;
   e.preventDefault();
   // Enter in the last column's name adds another column; anywhere else it saves
