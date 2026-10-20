@@ -79,11 +79,27 @@ const keyGroups = t => [
   ...(t.pkCols.length > 1 ? [{ label: 'pk', cols: t.pkCols, hue: t.hue }] : []),
   ...(t.multiUniques ?? []).map(u => ({ label: 'unique', cols: u.cols, hue: u.hue })),
 ];
-// The dots sit between the badge and the name, one column of them per key
+// The symbols sit between the badge and the name, right-aligned against the name:
+// a row in several keys gets several, side by side
 const DOT_W = 9;
-const dotX = k => PAD_X + BADGE_W + 3 + k * DOT_W;
-const dotsLead = groups => groups.length * DOT_W; // how far the names move right for the dots
-const keyDot = (g, k, y) => `<circle class="kdot" style="--h:${g.hue}" cx="${dotX(k)}" cy="${y}" r="3"/>`;
+const dotX = j => PAD_X + BADGE_W + GAP - 4 + j * DOT_W; // j: 0 = nearest the badge
+// how far the names move right: room for the most symbols one row (or footer line) has
+const dotsLead = (t, groups) => groups.length && Math.max(1, ...shownCols(t).map(c => groups.filter(g => g.cols.includes(c)).length)) * DOT_W;
+// Each key of a table also gets its own symbol, so they differ without colour too (10, then they repeat)
+const KEY_SYMBOLS = [
+  'M-3.2,0a3.2,3.2 0 1 0 6.4,0a3.2,3.2 0 1 0 -6.4,0',                // ●
+  'M-2.8,-2.8h5.6v5.6h-5.6z',                                         // ■
+  'M0,-3.6L3.4,2.6H-3.4z',                                            // ▲
+  'M0,-3.8L3.8,0L0,3.8L-3.8,0z',                                      // ◆
+  'M-3.4,0a3.4,3.4 0 1 0 6.8,0a3.4,3.4 0 1 0 -6.8,0M-1.8,0a1.8,1.8 0 1 1 3.6,0a1.8,1.8 0 1 1 -3.6,0', // ○
+  'M-3,-3h6v6h-6zM-1.5,-1.5v3h3v-3z',                                 // □
+  'M0,3.6L3.4,-2.6H-3.4z',                                            // ▼
+  'M-1,-3.6h2v2.6h2.6v2h-2.6v2.6h-2v-2.6h-2.6v-2h2.6z',               // ✚
+  'M0,-3.8L3.8,0L0,3.8L-3.8,0zM0,-1.9L-1.9,0L0,1.9L1.9,0z',          // ◇
+  'M0,-3.8L1.1,-1.3L3.7,-1.2L1.7,0.5L2.3,3.1L0,1.7L-2.3,3.1L-1.7,0.5L-3.7,-1.2L-1.1,-1.3z', // ★
+];
+const keyDot = (g, k, j, y) =>
+  `<path class="kdot" style="--h:${g.hue}" transform="translate(${dotX(j)},${y})" fill-rule="evenodd" d="${KEY_SYMBOLS[k % KEY_SYMBOLS.length]}"/>`;
 
 // Keys and indexes over several columns are listed below the rows: "unique (Name, Credits)"
 const FOOT_H = 22;
@@ -141,7 +157,7 @@ function measureData(t) {
 
 function measureTable(t) {
   if (state.dataView) return measureData(t);
-  const rows = shownCols(t).map(c => rowInfo(c, t)), foot = footLines(t), lead = dotsLead(keyGroups(t)), labelW = footLabelW(foot);
+  const rows = shownCols(t).map(c => rowInfo(c, t)), foot = footLines(t), lead = dotsLead(t, keyGroups(t)), labelW = footLabelW(foot);
   const w = Math.max(MIN_W, textW(t.name, FONTS.head) + 2 * PAD_X + 12, ...rows.map(r =>
     PAD_X + lead + BADGE_W + GAP + textW(r.name, r.bold ? FONTS.pk : FONTS.name) + 16 +
     (r.flags ? textW(r.flags, FONTS.flags) + 6 : 0) + textW(r.type, FONTS.type) + PAD_X),
@@ -651,14 +667,15 @@ function boxMarkup(t, b, interactive) {
   s += `<text class="title" x="${PAD_X}" y="${HEAD_H / 2}">${esc(t.name)}</text>`;
   if (b.data) return s + dataBoxBody(t, b, interactive) +
     `<rect class="outline" x=".5" y=".5" width="${w - 1}" height="${h - 1}" rx="${r - .5}"/></g>`;
-  const groups = keyGroups(t), lead = dotsLead(groups), nx = PAD_X + BADGE_W + GAP + lead;
+  const groups = keyGroups(t), lead = dotsLead(t, groups), slots = lead / DOT_W, nx = PAD_X + BADGE_W + GAP + lead;
   shownCols(t).forEach((c, i) => {
     const row = b.rows[i], y = rowY(i);
     const cls = 'row' + (c.isPk ? ' pk' : '') + (c.ref && !c.target ? ' bad' : '');
     s += `<g class="${cls}" data-key="${esc(t.name + '.' + c.name)}" data-line="${c.line}">`;
     if (c.ref && !c.target) s += `<title>${esc(c.refError)}</title>`;
     if (interactive) s += `<rect class="hit" x="1" y="${y - ROW_H / 2}" width="${w - 2}" height="${ROW_H}"/>`;
-    groups.forEach((g, k) => { if (g.cols.includes(c)) s += keyDot(g, k, y); });
+    const mine = groups.map((g, k) => [g, k]).filter(([g]) => g.cols.includes(c));
+    mine.forEach(([g, k], j) => { s += keyDot(g, k, slots - mine.length + j, y); });
     if (row.key) {
       const hue = row.key === 'PK' ? t.hue : c.keyHue;
       s += `<text class="key${row.key === 'FK' ? ' fk' : ''}${hue == null ? '' : ' hued'}"${hue == null ? '' : ` style="--h:${hue}"`} x="${PAD_X}" y="${y}">${row.key}</text>`;
@@ -679,7 +696,7 @@ function boxMarkup(t, b, interactive) {
     // hovering the line lights up its rows
     s += `<g class="keyline" data-cols="${esc(f.cols.map(n => t.name + '.' + n).join('\n'))}">`;
     if (interactive) s += `<rect class="hit" x="1" y="${y - FOOT_H / 2}" width="${w - 2}" height="${FOOT_H}"/>`;
-    if (f.group != null) s += keyDot(groups[f.group], f.group, y);
+    if (f.group != null) s += keyDot(groups[f.group], f.group, slots - 1, y);
     const lx = f.group != null ? nx : PAD_X;
     s += `<text class="flags"${f.group != null ? ` style="fill:oklch(var(--key-l, .55) var(--key-c, .15) ${groups[f.group].hue})"` : ''} x="${lx}" y="${y}">${f.label}</text>` +
       `<text class="type" x="${lx + labelW}" y="${y}">${esc(f.text)}</text></g>`;
