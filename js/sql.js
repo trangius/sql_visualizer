@@ -70,7 +70,7 @@ function sqlDefault(c) {
 
 function genSQL(tables) {
   const { order, cyclic } = topoOrder(tables.filter(t => t.cols.length));
-  const out = ['-- MariaDB / MySQL', "SET sql_mode = 'STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION';", ''];
+  const out = ['-- MariaDB / MySQL', ''];
   if (!order.length) return out.join('\n');
   if (cyclic) out.push('SET FOREIGN_KEY_CHECKS = 0;');
   for (const t of [...order].reverse()) out.push(`DROP TABLE IF EXISTS ${q(t.name)};`);
