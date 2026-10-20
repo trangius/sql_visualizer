@@ -275,6 +275,12 @@ function rawValue(t, c, i, ctx, ti, key) {
   if (plan.from === 'hint') return nth(c.hint, `${t.name}.${c.name}`, i);
   if (ti.options) return ti.options.length ? pick(ti.options, key) : '';
   if (ti.bool || plan.field === 'bool') return String(between(0, 1, key));
+  // values the database checks the form of
+  const hex = (n, k) => Array.from({ length: n }, (_, j) => '0123456789abcdef'[between(0, 15, key + k + j)]).join('');
+  if (ti.base === 'uuid') return `${hex(8, 'a')}-${hex(4, 'b')}-4${hex(3, 'c')}-8${hex(3, 'd')}-${hex(12, 'e')}`;
+  if (ti.base === 'json') return JSON.stringify({ [c.name]: i + 1 });
+  if (ti.base === 'inet4') return `10.0.${between(0, 255, key + 'a')}.${between(1, 254, key + 'b')}`;
+  if (ti.base === 'inet6') return `2001:db8::${hex(4, 'a')}`;
   const person = ctx.person;
   if (ti.time) return `${pad2(between(8, 17, key + 'h'))}:${pad2(between(0, 3, key + 'n') * 15)}:00`;
   if (ti.date || plan.field === 'birth') {
@@ -286,6 +292,7 @@ function rawValue(t, c, i, ctx, ti, key) {
     return ti.base === 'date' || (!ti.date && plan.field === 'birth') ? d
       : `${d} ${pad2(between(8, 17, key + 'h'))}:${pad2(between(0, 3, key + 'n') * 15)}:00`;
   }
+  if (ti.base === 'year') return between(1990, 2025, key);
   if (plan.from === 'record') return ctx.record(plan.kind, `${t.name}.${c.name}`)[plan.field];
   if (plan.from === 'person') {
     const p = plan.kind && !plan.kind.person && plan.field === 'name' ? null : plan.kind?.person && plan.kind !== ctx.kind ? ctx.other(plan.kind) : person;
@@ -511,20 +518,23 @@ function sampleData(tables, n = SAMPLE_ROWS) {
 
 // INSERT statements for the sample rows (appended to the SQL script), 20 per table
 async function sampleInserts(tables, dialect = 'mariadb') {
-  const { q, fkOff, fkOn, backslash } = dialectOf(dialect);
+  const D = dialectOf(dialect);
   if (await loadSampleKinds()) {
     const lang = sampleLang(tables);
     if (!(await loadSampleLang(lang))) { failed.add(lang); await loadSampleLang('en'); }
   }
   const data = sampleData(tables, 20);
-  const lit = (c, v) => v == null ? 'NULL' : isNumeric(c) ? v : `'${(backslash ? v.replace(/\\/g, '\\\\') : v).replace(/'/g, "''")}'`;
-  const out = ['-- Sample data (made up)', fkOff];
-  for (const t of topoOrder(tables.filter(t => t.cols.length)).order) {
+  const lit = (c, v) => v == null ? 'NULL' : typeInfo(c).bool ? D.bool(v !== '0') : isNumeric(c) ? v
+    : /^(var)?binary|blob$/.test(typeInfo(c).base) && D.bin ? D.bin(v) : D.str(v);
+  const { order, cyclic } = topoOrder(tables.filter(t => t.cols.length));
+  const out = ['-- Sample data (made up)', ...D.dataStart(order, cyclic)];
+  for (const t of order) {
     const rows = data.get(t);
     if (!rows.length) continue;
-    out.push(`INSERT INTO ${q(t.name)} (${t.cols.map(c => q(c.name)).join(', ')}) VALUES`);
-    out.push(rows.map(r => `  (${t.cols.map(c => lit(c, r.values.get(c))).join(', ')})`).join(',\n') + ';');
+    const [before, after] = D.dataTable?.(t) ?? [[], []];
+    out.push(...before, `INSERT INTO ${D.q(t.name)} (${t.cols.map(c => D.q(c.name)).join(', ')}) VALUES`);
+    out.push(rows.map(r => `  (${t.cols.map(c => lit(c, r.values.get(c))).join(', ')})`).join(',\n') + ';', ...after);
   }
-  out.push(fkOn, '');
+  out.push(...D.dataEnd(order, cyclic), '');
   return out.join('\n');
 }

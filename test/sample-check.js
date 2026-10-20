@@ -164,7 +164,7 @@ Gizmo
 
 const ctx = { console, document: { querySelector: () => null }, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, onSampleData() {}, state: { sampleLang: null } };
 vm.createContext(ctx);
-vm.runInContext(['model', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') + `
+vm.runInContext(['model', 'dialects', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') + `
 K = prepareKinds(SAMPLE_KINDS);
 let failures = 0;
 const fail = (where, msg) => { failures++; console.log('FAIL', where + ':', msg); };

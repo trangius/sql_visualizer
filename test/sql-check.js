@@ -1,17 +1,23 @@
 'use strict';
 
 // Checks the generated SQL: every example and the schemas below are turned into a script for
-// each database, with sample data, and run where a client is found: MariaDB (MYSQL=path/to/mysql,
-// otherwise mysql on the PATH or XAMPP's; a database named sqlviz_check is made and dropped)
-// and SQLite (sqlite3, in memory). What a database would refuse must be reported as a problem
-// instead. Going through the SQL tab and back must give the same Simple text.
+// each database, with sample data, and run where a client is found (a database named
+// sqlviz_check is made and dropped for each script):
+//   MariaDB     MYSQL=path/to/mysql, otherwise mysql or mariadb on the PATH, or XAMPP's; MYSQL_USER (root)
+//   MySQL       MYSQL8=path/to/its mysql and MYSQL8_SOCKET, as root without a password
+//   SQLite      sqlite3, in memory
+//   PostgreSQL  psql, as the current user
+//   SQL Server  sqlcmd (or /opt/mssql-tools18/bin/sqlcmd) as sa, with the password in SQLCMDPASSWORD
+// What a database would refuse must be reported as a problem instead. Reading a generated
+// script back and writing it again must give the same script, and for MariaDB and SQLite
+// the same Simple text. test/linux-setup.sh installs all five on Ubuntu.
 // Run: node test/sql-check.js
 
 const fs = require('fs'), path = require('path'), vm = require('vm'), { spawnSync } = require('child_process');
 const js = f => fs.readFileSync(path.join(__dirname, '..', 'js', f + '.js'), 'utf8');
 
-// Simple syntax or SQL (starts with CREATE; MariaDB's unless a third item says which), and the
-// problem it must report, if any: the same for both databases, or { mariadb, sqlite }
+// Simple syntax or SQL (MariaDB's unless a third item says which), and the problem it must
+// report, if any: the same for every database, or { mariadb, sqlite, postgres, mssql }
 const CASES = {
   'fk to a column without an index': [`Owner
   Id
@@ -19,7 +25,7 @@ const CASES = {
 Pet
   Id
   OwnerEmail -> Owner.Email
-`, { sqlite: 'SQLite needs Owner.Email to be the primary key or unique' }],
+`, { mysql: 'MySQL needs Owner.Email', sqlite: 'SQLite needs Owner.Email to be the primary key or unique', postgres: 'PostgreSQL needs Owner.Email', mssql: 'SQL Server needs Owner.Email' }],
   'fk to the second column of a key': [`OrderLine
   OrderNo int
   LineNo int
@@ -27,32 +33,32 @@ Pet
 Shipment
   Id
   LineNo -> OrderLine.LineNo
-`, { sqlite: 'SQLite needs OrderLine.LineNo' }],
+`, { mysql: 'MySQL needs OrderLine.LineNo', sqlite: 'SQLite needs OrderLine.LineNo', postgres: 'PostgreSQL needs', mssql: 'SQL Server needs' }],
   'fk of another integer type': [`Owner
   Id
 Pet
   Id
   OwnerId bigint -> Owner
-`, { mariadb: 'OwnerId is bigint but Owner.Id is int' }],
+`, { mariadb: 'OwnerId is bigint but Owner.Id is int', mysql: 'OwnerId is bigint but Owner.Id is int', mssql: 'SQL Server needs the same type' }],
   'fk of another sign': [`Owner
   Code int unsigned pk
 Pet
   Id
   OwnerCode int -> Owner
-`, { mariadb: 'OwnerCode is int but Owner.Code is int unsigned' }],
+`, { mariadb: 'OwnerCode is int but Owner.Code is int unsigned', mysql: 'OwnerCode is int but Owner.Code is int unsigned', mssql: 'SQL Server needs the same type' }],
   'fk to a text column': [`Tag
   Id
   Body text unique
 Note
   Id
   TagBody -> Tag.Body
-`, { mariadb: "Tag.Body is text, which can't be part of a foreign key" }],
+`, { mariadb: "Tag.Body is text, which can't be part of a foreign key", mysql: "MySQL can't make a key or index of Body", mssql: "SQL Server can't use Body (text)" }],
   'fk between strings of different lengths': [`Country
   Code char(2) pk
 City
   Id
   Country vc(2) -> Country
-`],
+`, { mssql: 'SQL Server needs the same type' }],
   'delete, update and default': [`Owner
   Id
   Name vc(50) [default 'Anna ''Ann'' #1']  # comment
@@ -66,6 +72,57 @@ Pet
   Weight decimal(5,2) [default -1.50]
   Alive bool [default true]
   Tag vc(20) null [default null]
+`, { mssql: 'SQL Server refuses [delete set null] here' }],
+  'cascades': [`Owner
+  Id
+  Name
+Pet
+  Id
+  OwnerId -> Owner [delete cascade, update cascade]
+  Born date [default now]
+Visit
+  Id
+  PetId -> Pet [delete cascade]
+  At datetime [default now]
+  Paid bool [default false]
+  Fee decimal(6,2) [default 0]
+`],
+  'cascade to itself': [`Person
+  Id
+  ParentId null -> Person [delete set null]
+`, { mssql: 'SQL Server refuses [delete set null] here' }],
+  'every type': [`Thing
+  Id
+  A tinyint
+  B smallint
+  C mediumint
+  D bigint
+  E int unsigned
+  F decimal(8,2)
+  G float
+  H double
+  I bool
+  J char(3)
+  K vc(40)
+  L text
+  M date
+  N datetime
+  O timestamp
+  P time
+  Q year
+  R enum('x','y')
+  S json null
+  T uuid null
+  U blob null
+  V bit
+  W vc(5000) null
+`],
+  'unique columns that may be null': [`Person
+  Id
+  Email vc(60) null unique
+  Code vc(5) null
+  Nick vc(20) null
+  unique (Code, Nick)
 `],
   'set null on a column that is not null': [`Owner
   Id
@@ -93,7 +150,7 @@ Pet
 Other
   Id
   Ref int -> AVeryLongTableNameThatGoesOnAndOnAndOnForever.AnotherExtremelyLongColumnNameNumberTwo
-`, { sqlite: 'SQLite needs' }],
+`, { mysql: 'MySQL needs', sqlite: 'SQLite needs', postgres: 'PostgreSQL needs', mssql: 'SQL Server needs' }],
   'keywords as names': [`Order
   Id
   Group vc(20) unique
@@ -125,7 +182,57 @@ ALTER TABLE Course ADD CONSTRAINT course_ibfk_1 FOREIGN KEY (TeacherId) REFERENC
 CREATE TABLE IF NOT EXISTS "Author" ("Id" INTEGER PRIMARY KEY AUTOINCREMENT, [Name] TEXT NOT NULL, "Note", Born DATE DEFAULT CURRENT_DATE);
 CREATE TABLE "Order" (Id INTEGER PRIMARY KEY, "Group" TEXT NOT NULL CHECK ("Group" IN ('a', 'b''c')), AuthorId INTEGER REFERENCES Author(Id) ON DELETE CASCADE) WITHOUT ROWID;
 CREATE INDEX ix_name ON Author (Name);
-CREATE INDEX ix_name2 ON "Order" (AuthorId);`, null, 'sqlite'],
+CREATE INDEX ix_name2 ON "Order" (AuthorId);`, { mysql: "MySQL can't make a key or index of Name", mssql: "SQL Server can't use Name (text) in an index" }, 'sqlite'],
+  'PostgreSQL script': [`SET statement_timeout = 0;
+SELECT pg_catalog.set_config('search_path', '', false);
+CREATE TABLE public.author (
+    id integer NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+    name character varying(100) NOT NULL,
+    bio text,
+    born date DEFAULT CURRENT_DATE,
+    active boolean DEFAULT true NOT NULL,
+    data jsonb
+);
+ALTER TABLE public.author OWNER TO postgres;
+ALTER TABLE ONLY public.author ADD CONSTRAINT author_pkey PRIMARY KEY (id);
+CREATE TABLE public.book (
+    id serial PRIMARY KEY,
+    title character varying(200) NOT NULL,
+    author_id integer REFERENCES public.author(id) ON DELETE CASCADE,
+    price numeric(8,2) DEFAULT 0.00,
+    added timestamp with time zone DEFAULT now(),
+    weight double precision
+);
+CREATE INDEX book_title_idx ON public.book USING btree (title);`, null, 'postgres'],
+  'SQL Server script': [`SET ANSI_NULLS ON
+GO
+CREATE TABLE [dbo].[Customer](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Name] [nvarchar](100) NOT NULL,
+	[Email] [nvarchar](200) NULL,
+	[Created] [datetime2](7) NOT NULL,
+	[Vip] [bit] NOT NULL,
+ CONSTRAINT [PK_Customer] PRIMARY KEY CLUSTERED ([Id] ASC) WITH (PAD_INDEX = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+CREATE TABLE [dbo].[Order](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CustomerId] [int] NOT NULL,
+	[Note] [nvarchar](max) NULL,
+	[Total] [money] NOT NULL,
+ CONSTRAINT [PK_Order] PRIMARY KEY CLUSTERED ([Id] ASC)
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[Customer] ADD  CONSTRAINT [DF_Customer_Created]  DEFAULT (getdate()) FOR [Created]
+GO
+ALTER TABLE [dbo].[Customer] ADD  DEFAULT ((0)) FOR [Vip]
+GO
+ALTER TABLE [dbo].[Order]  WITH CHECK ADD  CONSTRAINT [FK_Order_Customer] FOREIGN KEY([CustomerId])
+REFERENCES [dbo].[Customer] ([Id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Order] CHECK CONSTRAINT [FK_Order_Customer]
+GO`, null, 'mssql'],
 };
 
 function findClient() {
@@ -134,36 +241,65 @@ function findClient() {
   }
   return null;
 }
-const client = findClient(), sqlite = !spawnSync('sqlite3', ['--version']).error, user = process.env.MYSQL_USER ?? 'root';
+const has = c => !spawnSync(c, ['-?']).error;
+const sqlcmd = ['sqlcmd', '/opt/mssql-tools18/bin/sqlcmd'].find(has);
+const client = findClient(), sqlite = has('sqlite3'), psql = has('psql'), user = process.env.MYSQL_USER ?? 'root';
 const db = sql => spawnSync(client, ['-u' + user, '--batch'], { input: sql, encoding: 'utf8' }); // a password goes in MYSQL_PWD
 
 const ctx = { console, document: { querySelector: () => null }, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, onSampleData() {}, state: { sampleLang: null } };
 vm.createContext(ctx);
-vm.runInContext(['model', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') +
+vm.runInContext(['model', 'dialects', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') +
   '\nloadScript = async () => {}; // the sample files are already loaded', ctx);
 
-const DIALECTS = ['mariadb', 'sqlite'];
+const DIALECTS = ['mariadb', 'mysql', 'sqlite', 'postgres', 'mssql'];
+const LOSSY = new Set(['every type']); // types written another way: uuid is CHAR(36) in MariaDB
+const NAMES = { mariadb: 'MariaDB', mysql: 'MySQL', sqlite: 'SQLite', postgres: 'PostgreSQL', mssql: 'SQL Server' };
 const parse = vm.runInContext(`(src, sql, dialect) => {
   const r = sql ? parseSQL(src, dialect) : parseText(src);
   r.problems.push(...resolve(r.tables), ...dialectProblems(r.tables, dialect));
   return r;
 }`, ctx);
 const toText = vm.runInContext('(sql, dialect) => sqlToText(sql, false, dialect)', ctx);
+const regen = vm.runInContext('(sql, dialect) => { const r = parseSQL(sql, dialect); resolve(r.tables); return genSQL(r.tables, dialect); }', ctx);
 const textOf = vm.runInContext('(src) => { const r = parseText(src); resolve(r.tables); return genText(r.tables, []); }', ctx);
 const strip = t => t.replace(/#.*$/gm, '').replace(/[ \t]+$/gm, '').trim().split(/\n\n+/).sort().join('\n\n'); // the SQL orders tables by their keys
+
+// Runs a script in a fresh database; { status, out } with what went wrong
+const tmp = path.join(require('os').tmpdir(), 'sqlviz_check.sql');
+const RUN = {
+  mariadb: script => db(`DROP DATABASE IF EXISTS sqlviz_check; CREATE DATABASE sqlviz_check; USE sqlviz_check;\n${script}\nDROP DATABASE sqlviz_check;`),
+  mysql: script => spawnSync(process.env.MYSQL8, ['-uroot', '--socket=' + process.env.MYSQL8_SOCKET, '--batch'], { input:
+    `DROP DATABASE IF EXISTS sqlviz_check; CREATE DATABASE sqlviz_check; USE sqlviz_check;\n${script}\nDROP DATABASE sqlviz_check;`, encoding: 'utf8' }),
+  sqlite: script => spawnSync('sqlite3', ['-bail', ':memory:'], { input: script + '\nPRAGMA foreign_key_check;\n', encoding: 'utf8' }),
+  postgres: script => {
+    const env = { ...process.env, PGOPTIONS: '-c client_min_messages=warning' }; // not the NOTICEs of DROP TABLE IF EXISTS
+    const ps = (d, input) => spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', d], { input, encoding: 'utf8', env });
+    const made = ps('postgres', 'DROP DATABASE IF EXISTS sqlviz_check;\nCREATE DATABASE sqlviz_check;\n');
+    return made.status ? made : ps('sqlviz_check', script);
+  },
+  mssql: script => {
+    const sc = args => spawnSync(sqlcmd, ['-S', 'localhost', '-U', 'sa', '-C', '-b', '-I', '-l', '60', '-f', '65001', ...args], { encoding: 'utf8' });
+    const made = sc(['-Q', "IF DB_ID('sqlviz_check') IS NOT NULL DROP DATABASE sqlviz_check; CREATE DATABASE sqlviz_check;"]);
+    if (made.status) return made;
+    fs.writeFileSync(tmp, script);
+    const res = sc(['-d', 'sqlviz_check', '-i', tmp]);
+    return { status: res.status, stderr: res.status ? res.stdout + res.stderr : '' }; // sqlcmd writes its errors to stdout
+  },
+};
 
 (async () => {
   let failures = 0;
   const fail = (where, msg) => { failures++; console.log('FAIL', where + ':', msg); };
-  const ping = client && db('SELECT 1'), run = { mariadb: ping && !ping.status, sqlite };
-  if (!client) console.log('No MariaDB client found: its scripts are only generated, not run.');
-  else if (!run.mariadb) console.log('Could not connect to MariaDB:', ping.stderr.trim());
-  if (!sqlite) console.log('No sqlite3 found: its scripts are only generated, not run.');
-  const all = { ...Object.fromEntries(Object.entries(vm.runInContext('EXAMPLES', ctx)).map(([k, v]) => [k, [v]])), ...CASES };
+  const ping = client && db('SELECT 1');
+  const run = { mariadb: ping && !ping.status, mysql: !!process.env.MYSQL8 && has(process.env.MYSQL8), sqlite, postgres: psql, mssql: !!sqlcmd && !!process.env.SQLCMDPASSWORD };
+  for (const d of DIALECTS) if (!run[d]) console.log(`${NAMES[d]}: no server or client found, its scripts are only generated, not run.`);
+  const only = process.argv[2]; // a part of a schema's name, to check just those
+  const all = Object.fromEntries(Object.entries({ ...Object.fromEntries(Object.entries(vm.runInContext('EXAMPLES', ctx)).map(([k, v]) => [k, [v]])), ...CASES })
+    .filter(([k]) => !only || k.includes(only)));
   for (const [name, [src, expects, from = 'mariadb']] of Object.entries(all)) {
-    const sql = /^\s*(CREATE|PRAGMA)\b/i.test(src);
+    const sql = /^\s*(CREATE|PRAGMA|SET)\b/i.test(src);
     for (const dialect of DIALECTS) {
-      const where = `${name} (${dialect})`, expect = typeof expects === 'string' ? expects : expects?.[dialect];
+      const where = `${name} (${NAMES[dialect]})`, expect = typeof expects === 'string' ? expects : expects?.[dialect];
       // SQL is read as written, then written for each database
       const r = parse(src, sql, sql ? from : dialect);
       if (sql && from !== dialect) r.problems.push(...vm.runInContext('dialectProblems', ctx)(r.tables, dialect));
@@ -174,19 +310,20 @@ const strip = t => t.replace(/#.*$/gm, '').replace(/[ \t]+$/gm, '').trim().split
       }
       if (errors.length) { fail(where, 'unexpected problems ' + JSON.stringify(errors)); continue; }
       const schema = ctx.genSQL(r.tables, dialect), script = schema + '\n' + await ctx.sampleInserts(r.tables, dialect);
-      if (!sql && strip(toText(schema, dialect)) !== strip(textOf(src))) fail(where, 'SQL and back changed it:\n' + toText(schema, dialect));
-      if (sql && strip(toText(schema, dialect)) !== strip(toText(src, from))) fail(where, 'SQL and back changed it:\n' + toText(schema, dialect));
+      if (regen(schema, dialect) !== schema) fail(where, 'reading the script and writing it again changed it:\n' + regen(schema, dialect));
+      if (!sql && ['mariadb', 'mysql', 'sqlite'].includes(dialect) && !LOSSY.has(name) && strip(toText(schema, dialect)) !== strip(textOf(src))) {
+        fail(where, 'SQL and back changed it:\n' + toText(schema, dialect));
+      }
       if (name === 'enum keeps its case' && !/'Small','Large'/.test(script)) fail(where, 'enum values changed case');
-      if (/\b\w{65,}\b/.test(script.replace(/'[^']*'/g, ''))) fail(where, 'a name longer than 64 characters');
+      const max = vm.runInContext(`dialectOf('${dialect}').maxName`, ctx);
+      if (new RegExp(`\\b\\w{${max + 1},}\\b`).test(script.replace(/'[^']*'/g, ''))) fail(where, `a name longer than ${max} characters`);
       if (!run[dialect]) continue;
-      const res = dialect === 'mariadb'
-        ? db(`DROP DATABASE IF EXISTS sqlviz_check; CREATE DATABASE sqlviz_check; USE sqlviz_check;\n${script}\nDROP DATABASE sqlviz_check;`)
-        : spawnSync('sqlite3', ['-bail', ':memory:'], { input: script + '\nPRAGMA foreign_key_check;\n', encoding: 'utf8' });
-      if (res.status || res.stderr.trim()) fail(where, res.stderr.trim() + '\n' + script);
+      const res = RUN[dialect](script);
+      if (res.status || res.stderr?.trim()) fail(where, res.stderr.trim() + '\n' + script);
       else if (dialect === 'sqlite' && res.stdout.trim()) fail(where, 'sample data breaks a foreign key: ' + res.stdout.trim());
     }
   }
-  const ran = DIALECTS.filter(d => run[d]).map(d => d === 'sqlite' ? 'SQLite' : 'MariaDB');
-  console.log(failures ? failures + ' problems' : `sql ok: ${Object.keys(all).length} schemas${ran.length ? ', run on ' + ran.join(' and ') : ''}`);
+  const ran = DIALECTS.filter(d => run[d]).map(d => NAMES[d]);
+  console.log(failures ? failures + ' problems' : `sql ok: ${Object.keys(all).length} schemas${ran.length ? ', run on ' + ran.join(', ') : ''}`);
   process.exitCode = failures ? 1 : 0;
 })();

@@ -201,8 +201,15 @@ $('#newTabBtn').onclick = () => newDoc('Untitled', '');
 const docFields = (src, sql) => sql
   ? { mode: 'sql', sql: src, text: '', sqlStale: false, textStale: true, dialect: guessDialect(src) }
   : { mode: 'text', text: src };
-// SQL written for SQLite: its own words, and none of MariaDB's
-const guessDialect = src => /\b(AUTOINCREMENT|PRAGMA|WITHOUT\s+ROWID)\b/i.test(src) && !/`|\bAUTO_INCREMENT\b|\bENGINE\s*=/i.test(src) ? 'sqlite' : 'mariadb';
+// The database a script was written for, by the words only it uses; MariaDB when nothing tells
+const DIALECT_SIGNS = {
+  mssql: /\[dbo\]|\bIDENTITY\s*\(|\bN?VARCHAR\s*\(\s*MAX\b|\bNVARCHAR\b|\bDATETIME2\b|\bUNIQUEIDENTIFIER\b|^\s*GO\s*$/im,
+  postgres: /\b(BIG)?SERIAL\b|\bBYTEA\b|\bJSONB\b|\bTIMESTAMPTZ\b|::|\bAS\s+IDENTITY\b|\bpg_catalog\b/i,
+  sqlite: /\bAUTOINCREMENT\b|\bPRAGMA\b|\bWITHOUT\s+ROWID\b/i,
+};
+const guessDialect = src => /^-- MySQL dump|utf8mb4_0900_/im.test(src) ? 'mysql'
+  : /`|\bAUTO_INCREMENT\b|\bENGINE\s*=/i.test(src) ? 'mariadb'
+  : Object.keys(DIALECT_SIGNS).find(d => DIALECT_SIGNS[d].test(src)) ?? 'mariadb';
 
 // Open a .sql or text file in a new tab, from the button or dropped on the page
 async function openFile(file) {
