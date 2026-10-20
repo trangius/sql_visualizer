@@ -18,11 +18,11 @@ const squeeze = (bytes, how) => new Response(new Blob([bytes]).stream().pipeThro
 // with comments became a 650 character link instead of 5800). SQL comments are left out.
 function shareText() {
   if (state.mode === 'text') return state.text;
-  return sqlToText(state.sql, false);
+  return sqlToText(state.sql, false, state.dialect);
 }
 
 async function shareLink() {
-  const d = { n: activeDoc().name, m: 'text', s: shareText() };
+  const d = { n: activeDoc().name, m: 'text', s: shareText(), ...(state.dialect !== 'mariadb' && { dl: state.dialect }) };
   const z = await squeeze(new TextEncoder().encode(JSON.stringify(d)), new CompressionStream('deflate-raw'));
   return location.href.split('#')[0] + '#d=' + b64url(z);
 }
@@ -46,7 +46,8 @@ async function openShared() {
     const raw = await squeeze(unb64url(m[1]), new DecompressionStream('deflate-raw'));
     const d = JSON.parse(new TextDecoder().decode(raw));
     if (typeof d?.s !== 'string') throw new Error('no schema in the link');
-    newDoc(typeof d.n === 'string' && d.n || 'Shared', d.s, docFields(d.s, d.m === 'sql')); // no positions: auto layout, then fit
+    const dialect = DIALECTS[d.dl] ? { dialect: d.dl } : {};
+    newDoc(typeof d.n === 'string' && d.n || 'Shared', d.s, { ...docFields(d.s, d.m === 'sql'), ...dialect }); // no positions: auto layout, then fit
   } catch {
     toast('That link is broken or incomplete.');
   }

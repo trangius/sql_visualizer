@@ -509,21 +509,22 @@ function sampleData(tables, n = SAMPLE_ROWS) {
   return data;
 }
 
-// INSERT statements for the sample rows (appended to the MariaDB script), 20 per table
-async function sampleInserts(tables) {
+// INSERT statements for the sample rows (appended to the SQL script), 20 per table
+async function sampleInserts(tables, dialect = 'mariadb') {
+  const { q, fkOff, fkOn, backslash } = dialectOf(dialect);
   if (await loadSampleKinds()) {
     const lang = sampleLang(tables);
     if (!(await loadSampleLang(lang))) { failed.add(lang); await loadSampleLang('en'); }
   }
   const data = sampleData(tables, 20);
-  const lit = (c, v) => v == null ? 'NULL' : isNumeric(c) ? v : `'${v.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`;
-  const out = ['-- Sample data (made up)', 'SET FOREIGN_KEY_CHECKS = 0;'];
+  const lit = (c, v) => v == null ? 'NULL' : isNumeric(c) ? v : `'${(backslash ? v.replace(/\\/g, '\\\\') : v).replace(/'/g, "''")}'`;
+  const out = ['-- Sample data (made up)', fkOff];
   for (const t of topoOrder(tables.filter(t => t.cols.length)).order) {
     const rows = data.get(t);
     if (!rows.length) continue;
     out.push(`INSERT INTO ${q(t.name)} (${t.cols.map(c => q(c.name)).join(', ')}) VALUES`);
     out.push(rows.map(r => `  (${t.cols.map(c => lit(c, r.values.get(c))).join(', ')})`).join(',\n') + ';');
   }
-  out.push('SET FOREIGN_KEY_CHECKS = 1;', '');
+  out.push(fkOn, '');
   return out.join('\n');
 }

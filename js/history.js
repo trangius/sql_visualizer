@@ -6,7 +6,7 @@
 // compared and only the difference is kept:
 //   • text / SQL: the one stretch that changed  { at, del, ins }
 //   • box positions: before/after for just the boxes that moved
-//   • flags: Text/SQL mode and which side needs regenerating, if they changed
+//   • flags: Text/SQL mode, the SQL's database and which side needs regenerating, if they changed
 // A burst of typing is one entry. So is a drag, an auto layout, or a dialog save
 // (text and positions together).
 //
@@ -16,13 +16,13 @@
 // That keeps later text offsets valid, and undo returns you to the mode you were in.
 
 const hist = { undo: [], redo: [], open: null, depth: 0, timer: 0, LIMIT: 500 };
-const HIST_FLAGS = ['mode', 'textStale', 'sqlStale'];
+const HIST_FLAGS = ['mode', 'textStale', 'sqlStale', 'dialect'];
 const TYPING_PAUSE = 800; // ms without typing that ends a burst
 
 function histCapture() {
   const p = {};
   for (const [k, v] of Object.entries(pos)) p[k] = { ...v };
-  return { text: state.text, sql: state.sql, mode: state.mode, textStale: state.textStale, sqlStale: state.sqlStale, pos: p };
+  return { text: state.text, sql: state.sql, mode: state.mode, textStale: state.textStale, sqlStale: state.sqlStale, dialect: state.dialect, pos: p };
 }
 
 // The changed stretch between two strings: common start and end trimmed off

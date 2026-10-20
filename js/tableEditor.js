@@ -444,7 +444,7 @@ function commitText(text, line) {
   } else {
     const r = parseText(text);
     resolve(r.tables);
-    state.sql = genSQL(r.tables);
+    state.sql = genSQL(r.tables, state.dialect);
     state.sqlStale = false;
     ta.value = state.sql;
     update();

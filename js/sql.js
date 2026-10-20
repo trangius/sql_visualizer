@@ -1,13 +1,13 @@
 'use strict';
 
 // One conversion shared by editor regeneration, share links and document transforms.
-function sqlToText(sql, includeProblems = true) {
-  const r = parseSQL(sql);
+function sqlToText(sql, includeProblems = true, dialect = 'mariadb') {
+  const r = parseSQL(sql, dialect);
   resolve(r.tables);
   return genText(r.tables, includeProblems ? r.problems : []);
 }
 
-// ─── Model → SQL (MariaDB) ───────────────────────────────────────────────────
+// ─── Model → SQL ─────────────────────────────────────────────────────────────
 
 // Reserved words in MariaDB (and MySQL 8): names like these must be quoted
 const RESERVED = new Set(`ACCESSIBLE ADD ALL ALTER ANALYZE AND AS ASC ASENSITIVE BEFORE BETWEEN BIGINT BINARY
@@ -32,6 +32,38 @@ TRAILING TRIGGER TRUE UNDO UNION UNIQUE UNLOCK UNSIGNED UPDATE USAGE USE USING U
 VARBINARY VARCHAR VARCHARACTER VARYING VIRTUAL WHEN WHERE WHILE WINDOW WITH WRITE XOR YEAR_MONTH ZEROFILL`.split(/\s+/));
 const q = n => RESERVED.has(n.toUpperCase()) ? '`' + n + '`' : n;
 
+// SQLite's keywords: quoted wherever they are used as a name
+const SQLITE_KEYWORDS = new Set(`ABORT ACTION ADD AFTER ALL ALTER ALWAYS ANALYZE AND AS ASC ATTACH AUTOINCREMENT BEFORE
+BEGIN BETWEEN BY CASCADE CASE CAST CHECK COLLATE COLUMN COMMIT CONFLICT CONSTRAINT CREATE CROSS CURRENT CURRENT_DATE
+CURRENT_TIME CURRENT_TIMESTAMP DATABASE DEFAULT DEFERRABLE DEFERRED DELETE DESC DETACH DISTINCT DO DROP EACH ELSE END
+ESCAPE EXCEPT EXCLUDE EXCLUSIVE EXISTS EXPLAIN FAIL FILTER FIRST FOLLOWING FOR FOREIGN FROM FULL GENERATED GLOB GROUP
+GROUPS HAVING IF IGNORE IMMEDIATE IN INDEX INDEXED INITIALLY INNER INSERT INSTEAD INTERSECT INTO IS ISNULL JOIN KEY LAST
+LEFT LIKE LIMIT MATCH MATERIALIZED NATURAL NO NOT NOTHING NOTNULL NULL NULLS OF OFFSET ON OR ORDER OTHERS OUTER OVER
+PARTITION PLAN PRAGMA PRECEDING PRIMARY QUERY RAISE RANGE RECURSIVE REFERENCES REGEXP REINDEX RELEASE RENAME REPLACE
+RESTRICT RETURNING RIGHT ROLLBACK ROW ROWS SAVEPOINT SELECT SET TABLE TEMP TEMPORARY THEN TIES TO TRANSACTION TRIGGER
+UNBOUNDED UNION UNIQUE UPDATE USING VACUUM VALUES VIEW VIRTUAL WHEN WHERE WINDOW WITH WITHOUT`.split(/\s+/));
+
+// What differs between the databases the SQL is written for. state.dialect is one of these keys.
+const DIALECTS = {
+  mariadb: {
+    name: 'MariaDB',
+    q,
+    fkOff: 'SET FOREIGN_KEY_CHECKS = 0;',
+    fkOn: 'SET FOREIGN_KEY_CHECKS = 1;',
+    dqIdent: false,      // "x" is a string
+    backslash: true,     // \ escapes in strings
+  },
+  sqlite: {
+    name: 'SQLite',
+    q: n => SQLITE_KEYWORDS.has(n.toUpperCase()) ? '"' + n + '"' : n,
+    fkOff: 'PRAGMA foreign_keys = OFF;',
+    fkOn: 'PRAGMA foreign_keys = ON;', // SQLite only checks foreign keys when this is on
+    dqIdent: true,       // "x" (and [x]) is a name
+    backslash: false,
+  },
+};
+const dialectOf = d => DIALECTS[d] ?? DIALECTS.mariadb;
+
 function topoOrder(tables) {
   const deps = new Map(tables.map(t => [t, t.cols.filter(c => c.target && c.target !== t).map(c => c.target)]));
   const out = [], done = new Set();
@@ -55,7 +87,7 @@ function name64(n) {
   return n.slice(0, 57) + '_' + h.toString(36).padStart(6, '0').slice(-6);
 }
 
-// A foreign key needs an index on the column it points to. True when a key or index already starts with it.
+// MariaDB needs an index on the column a foreign key points to. True when a key or index already starts with it.
 function hasIndex(t, c) {
   return c.unique || t.pkCols[0] === c || t.multiUniques.some(u => u.cols[0] === c) ||
     (t.indexes ?? []).some(ix => ix.cols[0]?.toLowerCase() === c.name.toLowerCase());
@@ -68,13 +100,19 @@ function sqlDefault(c) {
   return /^(null|true|false)$/.test(d) ? d.toUpperCase() : d;
 }
 
-function genSQL(tables) {
+function genSQL(tables, dialect = 'mariadb') {
+  return dialect === 'sqlite' ? genSQLite(tables) : genMariaDB(tables);
+}
+
+const fkActionsSQL = c => `${c.onDelete ? ' ON DELETE ' + c.onDelete.toUpperCase() : ''}${c.onUpdate ? ' ON UPDATE ' + c.onUpdate.toUpperCase() : ''}`;
+const dropTables = (order, q) => [...order].reverse().map(t => `DROP TABLE IF EXISTS ${q(t.name)};`);
+
+function genMariaDB(tables) {
   const { order, cyclic } = topoOrder(tables.filter(t => t.cols.length));
   const out = ['-- MariaDB / MySQL', ''];
   if (!order.length) return out.join('\n');
   if (cyclic) out.push('SET FOREIGN_KEY_CHECKS = 0;');
-  for (const t of [...order].reverse()) out.push(`DROP TABLE IF EXISTS ${q(t.name)};`);
-  out.push('');
+  out.push(...dropTables(order, q), '');
   const created = new Set(), deferred = [], targetIndexes = new Map();
   for (const t of order) {
     created.add(t);
@@ -94,8 +132,7 @@ function genSQL(tables) {
     }
     for (const c of t.cols) {
       if (!c.target) continue;
-      const fk = `FOREIGN KEY (${q(c.name)}) REFERENCES ${q(c.target.name)}(${q(c.targetCol.name)})` +
-        `${c.onDelete ? ' ON DELETE ' + c.onDelete.toUpperCase() : ''}${c.onUpdate ? ' ON UPDATE ' + c.onUpdate.toUpperCase() : ''}`;
+      const fk = `FOREIGN KEY (${q(c.name)}) REFERENCES ${q(c.target.name)}(${q(c.targetCol.name)})` + fkActionsSQL(c);
       if (created.has(c.target)) defs.push('  ' + fk);
       else deferred.push(`ALTER TABLE ${q(t.name)} ADD ${fk};`);
     }
@@ -106,22 +143,87 @@ function genSQL(tables) {
     // names MariaDB gives the indexes it makes itself: a UNIQUE or FOREIGN KEY one is named after its first column
     const taken = new Set(['primary', ...t.cols.filter(c => c.unique || c.target).map(c => c.name.toLowerCase()),
       ...(t.multiUniques ?? []).map(u => u.cols[0].name.toLowerCase()), ...targetIndexes.get(t) ?? []]);
-    return (t.indexes ?? []).filter(ix => ix.cols.every(n => t.cols.some(c => c.name === n))).map(ix => {
-      const base = name64(ix.name ?? indexName(t.name, ix.cols));
-      let name = base;
-      for (let i = 2; taken.has(name.toLowerCase()); i++) name = base.slice(0, 63 - String(i).length) + '_' + i;
-      taken.add(name.toLowerCase());
-      return `CREATE INDEX ${q(name)} ON ${q(t.name)} (${ix.cols.map(q).join(', ')});`;
-    });
+    return createIndexes(t, taken, q);
   });
   if (indexes.length) out.push(...indexes, '');
   if (cyclic) out.push('SET FOREIGN_KEY_CHECKS = 1;', '');
   return out.join('\n');
 }
 
+// CREATE INDEX for each of the table's indexes, with names not in `taken` (which it adds to)
+function createIndexes(t, taken, q) {
+  return (t.indexes ?? []).filter(ix => ix.cols.every(n => t.cols.some(c => c.name === n))).map(ix => {
+    const base = name64(ix.name ?? indexName(t.name, ix.cols));
+    let name = base;
+    for (let i = 2; taken.has(name.toLowerCase()); i++) name = base.slice(0, 63 - String(i).length) + '_' + i;
+    taken.add(name.toLowerCase());
+    return `CREATE INDEX ${q(name)} ON ${q(t.name)} (${ix.cols.map(q).join(', ')});`;
+  });
+}
+
+// SQLite takes the same type names (VARCHAR(50), DATE, DECIMAL(8,2)…) and only uses them as a hint,
+// except: an Id that numbers itself is INTEGER PRIMARY KEY, and an enum is TEXT with a CHECK.
+// Tables may point to tables made later, so they are made in key order only to read well.
+function genSQLite(tables) {
+  const { q: Q, fkOff, fkOn } = DIALECTS.sqlite;
+  const { order, cyclic } = topoOrder(tables.filter(t => t.cols.length));
+  const out = ['-- SQLite', cyclic ? fkOff : fkOn, ''];
+  if (!order.length) return out.join('\n');
+  out.push(...dropTables(order, Q), '');
+  for (const t of order) {
+    const w = Math.max(...t.cols.map(c => Q(c.name).length));
+    const rowid = t.cols.find(c => c.autoInc);
+    const defs = t.cols.map(c => {
+      if (c === rowid) return `  ${Q(c.name).padEnd(w)} INTEGER PRIMARY KEY`;
+      const en = c.effType.match(/^(enum|set)\((.*)\)$/);
+      return `  ${Q(c.name).padEnd(w)} ${en ? 'TEXT' : sqlType(c.effType)}${c.nullable ? ' NULL' : ' NOT NULL'}` +
+        `${c.default != null ? ' DEFAULT ' + sqlDefault(c) : ''}${c.unique ? ' UNIQUE' : ''}` +
+        `${en?.[1] === 'enum' ? ` CHECK (${Q(c.name)} IN (${en[2]}))` : ''}`;
+    });
+    if (t.pkCols.length && !rowid) defs.push(`  PRIMARY KEY (${t.pkCols.map(c => Q(c.name)).join(', ')})`);
+    for (const u of t.multiUniques ?? []) defs.push(`  UNIQUE (${u.cols.map(c => Q(c.name)).join(', ')})`);
+    for (const c of t.cols) {
+      if (c.target) defs.push(`  FOREIGN KEY (${Q(c.name)}) REFERENCES ${Q(c.target.name)}(${Q(c.targetCol.name)})` + fkActionsSQL(c));
+    }
+    out.push(`CREATE TABLE ${Q(t.name)} (\n${defs.join(',\n')}\n);`, '');
+  }
+  const taken = new Set(); // an index name is for the whole database, not per table
+  const indexes = order.flatMap(t => createIndexes(t, taken, Q));
+  if (indexes.length) out.push(...indexes, '');
+  if (cyclic) out.push(fkOn, '');
+  return out.join('\n');
+}
+
+// Problems that depend on the database: what it refuses about a foreign key
+function dialectProblems(tables, dialect = 'mariadb') {
+  const problems = [];
+  for (const t of tables) {
+    for (const c of t.cols) {
+      if (!c.target || c.implicit) continue;
+      const tt = c.target, tc = c.targetCol, where = `${tt.name}.${tc.name}`;
+      if (!(tt.pkCols.length === 1 && tt.pkCols[0] === tc) && !tc.unique) {
+        problems.push(dialect === 'sqlite'
+          ? problem(c.line, `SQLite needs ${where} to be the primary key or unique`)
+          : problem(c.line, `${where} is neither the primary key nor unique. The SQL adds an index on it, but normally it should be unique.`, 'warn'));
+      }
+      if (dialect === 'sqlite') continue; // SQLite doesn't compare the types
+      const a = keyType(c.effType), b = keyType(tc.effType);
+      if (a === null || b === null) {
+        problems.push(problem(c.line, `${b === null ? where : c.name} is ${b === null ? tc.effType : c.effType}, ` +
+          'which can\'t be part of a foreign key. Use vc instead.'));
+      } else if (a !== b) {
+        problems.push(problem(c.line, `${c.name} is ${c.effType} but ${where} is ${tc.effType}. ` +
+          'A foreign key needs the same type on both sides.'));
+      }
+    }
+  }
+  return problems;
+}
+
 // ─── SQL → model ─────────────────────────────────────────────────────────────
 
-function tokenizeSQL(src) {
+function tokenizeSQL(src, dialect = 'mariadb') {
+  const { dqIdent, backslash } = dialectOf(dialect);
   const toks = [];
   let i = 0, line = 1;
   const wordCh = /[\p{L}\p{N}_$]/u;
@@ -136,11 +238,15 @@ function tokenizeSQL(src) {
       i += 2;
       continue;
     }
-    if (ch === '`') {
-      const start = line;
+    if (ch === '`' || (dqIdent && (ch === '"' || ch === '['))) { // a quoted name
+      const start = line, close = ch === '[' ? ']' : ch;
       let v = '';
       i++;
-      while (i < src.length && src[i] !== '`') { if (src[i] === '\n') line++; v += src[i++]; }
+      while (i < src.length) {
+        if (src[i] === close) { if (close !== ']' && src[i + 1] === close) { v += close; i += 2; continue; } break; }
+        if (src[i] === '\n') line++;
+        v += src[i++];
+      }
       i++;
       toks.push({ t: 'id', v, line: start });
       continue;
@@ -150,7 +256,7 @@ function tokenizeSQL(src) {
       let v = '';
       i++;
       while (i < src.length) {
-        if (src[i] === '\\') { v += src[i + 1] ?? ''; i += 2; continue; }
+        if (backslash && src[i] === '\\') { v += src[i + 1] ?? ''; i += 2; continue; }
         if (src[i] === ch) { if (src[i + 1] === ch) { v += ch; i += 2; continue; } break; }
         if (src[i] === '\n') line++;
         v += src[i++];
@@ -218,14 +324,14 @@ function splitTop(toks, sep = ',') {
 
 const tokText = toks => toks.map(x => x.t === 'str' ? `'${x.v.replace(/'/g, "''")}'` : x.v).join('');
 
-function parseSQL(src) {
+function parseSQL(src, dialect = 'mariadb') {
   const problems = [];
   const warn = (line, msg) => problems.push(problem(line, msg, 'warn'));
   const error = (line, msg) => problems.push(problem(line, msg));
   const accs = [];
   const findAcc = n => accs.find(a => a.name === n) || accs.find(a => a.name.toLowerCase() === n.toLowerCase());
 
-  const statements = splitTop(tokenizeSQL(src), ';');
+  const statements = splitTop(tokenizeSQL(src, dialect), ';');
   for (const st of statements) {
     const p = new Cursor(st);
     const line = st[0].line;
@@ -262,7 +368,8 @@ function parseSQL(src) {
         parseDef(c, acc, warn, error);
       }
     } else if (['DROP', 'SET', 'USE', 'INSERT', 'SELECT', 'UPDATE', 'DELETE', 'START', 'COMMIT', 'BEGIN',
-                'LOCK', 'UNLOCK', 'TRUNCATE', 'DELIMITER', 'SHOW', 'DESCRIBE'].includes(kw)) {
+                'LOCK', 'UNLOCK', 'TRUNCATE', 'DELIMITER', 'SHOW', 'DESCRIBE', 'PRAGMA', 'END', 'ROLLBACK',
+                'SAVEPOINT', 'RELEASE', 'VACUUM', 'ANALYZE', 'REINDEX', 'ATTACH', 'DETACH'].includes(kw)) {
       // not part of the schema
     } else {
       warn(line, `Statement starting with "${st[0].v}" ignored`);
@@ -348,14 +455,27 @@ function readDefault(p) {
   return '(' + v + (args ? '(' + tokText(args) + ')' : '') + ')';
 }
 
+const COLUMN_WORDS = ['NOT', 'NULL', 'PRIMARY', 'UNIQUE', 'DEFAULT', 'REFERENCES', 'CHECK', 'COLLATE', 'CONSTRAINT', 'GENERATED', 'AS'];
+
+// CHECK (Size IN ('S', 'M', 'L')): the values, as an enum's "'S','M','L'"; null for any other check
+function enumCheck(toks, name) {
+  if (!toks) return null;
+  const p = new Cursor(toks), col = p.ident();
+  if (!col || col.v.toLowerCase() !== name.toLowerCase() || !p.eatW('IN')) return null;
+  const vals = p.group(), parts = vals && splitTop(vals);
+  if (!p.done || !parts?.length || !parts.every(x => x.length === 1 && x[0].t === 'str')) return null;
+  return parts.map(x => tokText(x)).join(',');
+}
+
 function parseColumn(p, acc, warn, error) {
   const nameTok = p.ident();
   const line = nameTok?.line ?? p.peek()?.line;
-  const typeTok = p.ident();
-  if (!nameTok || !typeTok) { error(line, 'Could not read column definition'); return; }
-  let type = typeTok.v;
-  if (p.isP('(')) type += '(' + tokText(p.group()) + ')';
-  while (p.isW('UNSIGNED', 'SIGNED', 'ZEROFILL')) type += ' ' + p.next().v;
+  // SQLite lets a column go without a type: "Name NOT NULL", "Name,"
+  const typeTok = p.isW(...COLUMN_WORDS) ? null : p.ident();
+  if (!nameTok || (!typeTok && !p.done && !p.isW(...COLUMN_WORDS))) { error(line, 'Could not read column definition'); return; }
+  let type = typeTok?.v ?? null;
+  if (typeTok && p.isP('(')) type += '(' + tokText(p.group()) + ')';
+  while (typeTok && p.isW('UNSIGNED', 'SIGNED', 'ZEROFILL')) type += ' ' + p.next().v;
   const col = { name: nameTok.v, type, notNull: false, unique: false, pk: false, line };
   while (!p.done) {
     if (p.eatW('NOT')) { if (p.eatW('NULL')) col.notNull = true; continue; }
@@ -372,7 +492,12 @@ function parseColumn(p, acc, warn, error) {
       acc.fks.push({ cols: [col.name], rt: rt?.v, rcols, line, ...fkActions(p) });
       continue;
     }
-    if (p.eatW('CHECK')) { p.group(); warn(line, 'CHECK constraints are not shown. Ignored.'); continue; }
+    if (p.eatW('CHECK')) {
+      const values = enumCheck(p.group(), col.name);
+      if (values && /^(text|varchar|char)\b/i.test(col.type ?? 'text')) col.type = `enum(${values})`; // SQLite's enum
+      else warn(line, 'CHECK constraints are not shown. Ignored.');
+      continue;
+    }
     p.next(); // attribute we don't care about
   }
   if (acc.cols.some(c => c.name.toLowerCase() === col.name.toLowerCase())) {

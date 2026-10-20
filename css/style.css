@@ -293,7 +293,16 @@ main { flex: 1; display: flex; min-height: 0; }
 .editor-head {
   height: 46px; flex: none; display: flex; align-items: center; gap: 8px;
   padding: 0 8px 0 12px; border-bottom: 1px solid var(--line);
+  container-type: inline-size;
 }
+/* with the database menu beside SQL, a narrow editor keeps just the ? of Syntax */
+@container (max-width: 470px) {
+  .editor-head:has(#dialectWrap:not([hidden])) .help-btn { padding: 0 8px; }
+  .editor-head:has(#dialectWrap:not([hidden])) .help-btn .lbl { display: none; }
+}
+#dialectBtn { font-size: 12.5px; color: var(--muted); padding: 0 6px 0 9px; }
+#dialectBtn:hover, #dialectBtn[aria-expanded="true"] { color: var(--fg); }
+#dialectMenu { width: 180px; }
 .help-btn {
   height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 8px;
   border: 0; border-radius: 7px; background: transparent; color: var(--muted);

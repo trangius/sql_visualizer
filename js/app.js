@@ -34,8 +34,8 @@ function hlTextLine(line, st, hues = {}) {
 }
 
 const SQL_KW = new Set(`CREATE TABLE PRIMARY KEY FOREIGN REFERENCES NOT NULL AUTO_INCREMENT UNIQUE DROP IF EXISTS SET
-ALTER ADD CONSTRAINT DEFAULT INDEX ON DELETE UPDATE CASCADE COLUMN ENGINE CHARSET COLLATE CHECK`.split(/\s+/));
-const SQL_TYPES = /^(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|BIT|BOOL|BOOLEAN|CHAR|VARCHAR|TEXT|TINYTEXT|MEDIUMTEXT|LONGTEXT|BLOB|DATE|DATETIME|TIMESTAMP|TIME|YEAR|ENUM|SET|JSON|UNSIGNED)$/i;
+ALTER ADD CONSTRAINT DEFAULT INDEX ON DELETE UPDATE CASCADE COLUMN ENGINE CHARSET COLLATE CHECK PRAGMA AUTOINCREMENT IN`.split(/\s+/));
+const SQL_TYPES = /^(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|REAL|BIT|BOOL|BOOLEAN|CHAR|VARCHAR|TEXT|TINYTEXT|MEDIUMTEXT|LONGTEXT|BLOB|DATE|DATETIME|TIMESTAMP|TIME|YEAR|ENUM|SET|JSON|UNSIGNED)$/i;
 // st carries a /* comment */ that is still open over to the next line
 function hlSqlLine(line, st = {}) {
   let out = '', last = 0;
@@ -46,16 +46,16 @@ function hlSqlLine(line, st = {}) {
     if (end < 0) return out;
     st.inComment = false;
   }
-  const re = /(--.*$|#.*$|\/\*.*?(?:\*\/|$))|('(?:[^'\\]|\\.|'')*'?|"(?:[^"\\]|\\.|"")*"?)|(`[^`]*`?)|([\p{L}_][\p{L}\p{N}_$]*)/gu;
+  const re = /(--.*$|#.*$|\/\*.*?(?:\*\/|$))|('(?:[^'\\]|\\.|'')*'?)|("(?:[^"\\]|\\.|"")*"?)|(`[^`]*`?)|([\p{L}_][\p{L}\p{N}_$]*)/gu;
   re.lastIndex = last; // matchAll starts from here
   for (const m of line.matchAll(re)) {
     out += esc(line.slice(last, m.index));
     if (m[1]) {
       out += `<span class="h-com">${esc(m[1])}</span>`;
       if (m[1].startsWith('/*') && !(m[1].length >= 4 && m[1].endsWith('*/'))) st.inComment = true;
-    } else if (m[2]) out += `<span class="h-str">${esc(m[2])}</span>`;
-    else if (m[4] && SQL_KW.has(m[4].toUpperCase())) out += `<span class="h-kw">${esc(m[4])}</span>`;
-    else if (m[4] && SQL_TYPES.test(m[4])) out += `<span class="h-type">${esc(m[4])}</span>`;
+    } else if (m[2] || (m[3] && !dialectOf(state.dialect).dqIdent)) out += `<span class="h-str">${esc(m[0])}</span>`; // "x" is a name in SQLite
+    else if (m[5] && SQL_KW.has(m[5].toUpperCase())) out += `<span class="h-kw">${esc(m[5])}</span>`;
+    else if (m[5] && SQL_TYPES.test(m[5])) out += `<span class="h-type">${esc(m[5])}</span>`;
     else out += esc(m[0]);
     last = m.index + m[0].length;
   }
@@ -116,7 +116,7 @@ function updateStatus(problems) {
   btn.classList.toggle('error', problems.some(p => p.level === 'error'));
   btn.classList.toggle('warn', n > 0 && !problems.some(p => p.level === 'error'));
   $('#statusText').textContent = !n
-    ? (state.mode === 'sql' ? 'MariaDB · No problems' : 'No problems')
+    ? (state.mode === 'sql' ? `${dialectOf(state.dialect).name} · No problems` : 'No problems')
     : `${n} problem${n > 1 ? 's' : ''} · ${firstProblem.line ? 'Line ' + firstProblem.line + ': ' : ''}${firstProblem.msg}`;
   $('#statusText').title = n ? 'Click to see all problems' : '';
   // the expandable list of every problem (closes by itself when there are none)
@@ -208,7 +208,8 @@ ta.addEventListener('input', () => {
 const SETTINGS = ['colors', 'fontSize', 'wrap', 'notation', 'implicit', 'keysOnly', 'dataView', 'panel', 'leftW'];
 // base: the text the diagram was created with (an example, or empty), to tell whether it has changed
 // sampleLang: the language of the data view's made-up rows, null = guessed from the names
-const DOC_DEFAULTS = { text: '', sql: '', mode: 'text', textStale: false, sqlStale: true, base: null, sampleLang: null };
+// dialect: the database the SQL is written for, a key of DIALECTS
+const DOC_DEFAULTS = { text: '', sql: '', mode: 'text', textStale: false, sqlStale: true, base: null, sampleLang: null, dialect: 'mariadb' };
 const docKey = id => 'doc.' + id;
 const newDocId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 // a new diagram is named after its first comment line ("# School database")
@@ -313,8 +314,8 @@ function saveState() {
 window.addEventListener('pagehide', () => { if (saveTimer) saveNow(); });
 
 function parseCurrent() {
-  const r = state.mode === 'text' ? parseText(ta.value) : parseSQL(ta.value);
-  r.problems.push(...resolve(r.tables, state.implicit));
+  const r = state.mode === 'text' ? parseText(ta.value) : parseSQL(ta.value, state.dialect);
+  r.problems.push(...resolve(r.tables, state.implicit), ...dialectProblems(r.tables, state.dialect));
   return r;
 }
 
@@ -334,10 +335,10 @@ function regenerate(which) {
   if (which === 'sql') {
     const r = parseText(state.text);
     resolve(r.tables);
-    state.sql = genSQL(r.tables);
+    state.sql = genSQL(r.tables, state.dialect);
     state.sqlStale = false;
   } else {
-    state.text = sqlToText(state.sql);
+    state.text = sqlToText(state.sql, true, state.dialect);
     state.textStale = false;
   }
   histCommit();
@@ -359,6 +360,39 @@ function loadEditor() {
   updateModeSeg();
   update();
 }
+
+// Another database: the SQL is written again for it (one undo step). Edited SQL is read
+// as the old database's first, so nothing in the diagram is lost, but its comments are.
+function setDialect(dialect) {
+  if (dialect === state.dialect || !DIALECTS[dialect]) return;
+  const edited = state.textStale; // SQL written by hand, not generated
+  histBegin('dialect');
+  regenerate('text');
+  state.dialect = dialect;
+  state.sqlStale = true;
+  if (state.mode === 'sql') regenerate('sql');
+  ta.value = state.mode === 'text' ? state.text : state.sql;
+  updateModeSeg();
+  update();
+  histCommit();
+  saveState();
+  if (edited) toast(`The SQL is now written for ${DIALECTS[dialect].name}.`, 'Undo', histUndo);
+}
+function renderDialect() {
+  const d = dialectOf(state.dialect);
+  $('#dialectWrap').hidden = state.mode !== 'sql' || !$('#help').hidden;
+  $('#dialectLbl').textContent = d.name;
+  $('#dialectList').innerHTML = Object.entries(DIALECTS).map(([key, x]) =>
+    `<button role="menuitemradio" aria-checked="${x === d}" data-dialect="${key}">` +
+    `<span class="check">${x === d ? '✓' : ''}</span><span class="item-name">${x.name}</span></button>`).join('');
+  document.querySelectorAll('.dialect-name').forEach(el => { el.textContent = d.name; });
+}
+$('#dialectList').addEventListener('click', e => {
+  const b = e.target.closest('[data-dialect]');
+  if (!b) return;
+  closeMenus();
+  setDialect(b.dataset.dialect);
+});
 
 $('#modeSeg').addEventListener('click', e => {
   const b = e.target.closest('button');
@@ -421,6 +455,7 @@ function setHelp(open) {
 function updateModeSeg() {
   const helpOpen = !$('#help').hidden;
   document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', !helpOpen && b.dataset.mode === state.mode));
+  renderDialect();
 }
 $('#helpBtn').onclick = () => setHelp($('#help').hidden);
 $('#helpClose').onclick = () => setHelp(false);
@@ -595,7 +630,7 @@ function registerMenu(btn, menu) {
   });
 }
 // Editor text size (the Text menu stays open while stepping, so you see the change)
-for (const [btn, menu] of [['#exportBtn', '#exportMenu'], ['#schemeBtn', '#schemeMenu'], ['#themeMenuBtn', '#themeMenu'], ['#notationBtn', '#notationMenu'], ['#dataLangBtn', '#dataLangMenu']]) registerMenu(btn, menu);
+for (const [btn, menu] of [['#exportBtn', '#exportMenu'], ['#schemeBtn', '#schemeMenu'], ['#themeMenuBtn', '#themeMenu'], ['#notationBtn', '#notationMenu'], ['#dataLangBtn', '#dataLangMenu'], ['#dialectBtn', '#dialectMenu']]) registerMenu(btn, menu);
 const FONT_MIN = 10, FONT_MAX = 24;
 const lineHeight = () => Math.round(state.fontSize * 1.54); // 13px → 20px, as in the design
 function applyFontSize() {
@@ -634,12 +669,12 @@ applyWrap();
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu-wrap')) closeMenus(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
 
-// The schema as MariaDB: the SQL as edited, or generated from the text
+// The schema as SQL for the chosen database: as edited, or generated from the text
 function currentSql() {
   if (!state.sqlStale) return state.sql;
   const r = parseText(state.text);
   resolve(r.tables);
-  return genSQL(r.tables);
+  return genSQL(r.tables, state.dialect);
 }
 async function copySql() {
   closeMenus();
@@ -647,7 +682,7 @@ async function copySql() {
     await navigator.clipboard.writeText(currentSql());
     toast('SQL copied to clipboard');
   } catch {
-    toast('Could not copy. Use Export → MariaDB script instead.');
+    toast(`Could not copy. Use Export → ${dialectOf(state.dialect).name} script instead.`);
   }
 }
 $('#svgBtn').onclick = () => { closeMenus(); exportSvg(); };
@@ -661,7 +696,7 @@ $('#sqlBtn').onclick = () => {
 };
 $('#sqlDataBtn').onclick = async () => {
   closeMenus();
-  const name = exportName('sql'), sql = currentSql(), inserts = await sampleInserts(model.tables);
+  const name = exportName('sql'), sql = currentSql(), inserts = await sampleInserts(model.tables, state.dialect);
   download(new Blob([sql + '\n' + inserts], { type: 'text/sql' }), name);
   toast(`Saved ${name} with sample data`);
 };

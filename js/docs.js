@@ -199,8 +199,10 @@ $('#newTabBtn').onclick = () => newDoc('Untitled', '');
 
 // Fields for a new tab holding `src`: SQL opens in the SQL view, anything else in the simple one
 const docFields = (src, sql) => sql
-  ? { mode: 'sql', sql: src, text: '', sqlStale: false, textStale: true }
+  ? { mode: 'sql', sql: src, text: '', sqlStale: false, textStale: true, dialect: guessDialect(src) }
   : { mode: 'text', text: src };
+// SQL written for SQLite: its own words, and none of MariaDB's
+const guessDialect = src => /\b(AUTOINCREMENT|PRAGMA|WITHOUT\s+ROWID)\b/i.test(src) && !/`|\bAUTO_INCREMENT\b|\bENGINE\s*=/i.test(src) ? 'sqlite' : 'mariadb';
 
 // Open a .sql or text file in a new tab, from the button or dropped on the page
 async function openFile(file) {

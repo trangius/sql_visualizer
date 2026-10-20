@@ -66,8 +66,8 @@
       <button id="copyImgBtn" role="menuitem"><span>Copy image</span></button>
       <div class="menu-sep"></div>
       <div class="menu-label">Schema</div>
-      <button id="sqlBtn" role="menuitem"><span>MariaDB script</span><span class="ext">.sql</span></button>
-      <button id="sqlDataBtn" role="menuitem"><span>MariaDB script + sample data</span><span class="ext">.sql</span></button>
+      <button id="sqlBtn" role="menuitem"><span><span class="dialect-name">MariaDB</span> script</span><span class="ext">.sql</span></button>
+      <button id="sqlDataBtn" role="menuitem"><span><span class="dialect-name">MariaDB</span> script + sample data</span><span class="ext">.sql</span></button>
       <button id="copySqlBtn" role="menuitem"><span>Copy SQL</span><span class="ext">⌘⇧C</span></button>
       <div class="menu-sep"></div>
       <div class="menu-label">Share</div>
@@ -105,6 +105,16 @@
         <button data-mode="text">Simple</button>
         <button data-mode="sql">SQL</button>
       </div>
+      <div id="dialectWrap" class="menu-wrap" hidden>
+        <button id="dialectBtn" class="tool" aria-haspopup="menu" aria-expanded="false" title="The database the SQL is written for">
+          <span id="dialectLbl">MariaDB</span>
+          <svg width="12" height="16" class="ico chev" aria-hidden="true"><path d="M2.5 6.5 6 10l3.5-3.5"/></svg>
+        </button>
+        <div id="dialectMenu" class="menu menu-left" role="menu" hidden>
+          <div class="menu-label">Write the SQL for</div>
+          <div id="dialectList"></div>
+        </div>
+      </div>
       <div class="spacer"></div>
       <button id="undoBtn" class="icon-btn sm" title="Undo (⌘Z)" aria-label="Undo" disabled>
         <svg width="16" height="16" class="ico" aria-hidden="true"><path d="M5.5 9.5 2.5 6.5l3-3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7.5"/></svg>
@@ -134,7 +144,7 @@
           </button>
         </div>
       </div>
-      <button id="helpBtn" class="help-btn" title="Syntax reference" aria-pressed="false"><span class="q">?</span>Syntax</button>
+      <button id="helpBtn" class="help-btn" title="Syntax reference" aria-pressed="false"><span class="q">?</span><span class="lbl">Syntax</span></button>
     </div>
 
     <div class="docname">
@@ -195,7 +205,7 @@
           <span>Click a row</span><span>Jump to its line</span>
           <span>Double-click a table</span><span>Edit it in a dialog</span>
           <span>Hover a table</span><span>Highlight its arrows</span>
-          <span>SQL tab</span><span>Edit as MariaDB; changes convert back to Simple</span>
+          <span>SQL tab</span><span>Edit as MariaDB or SQLite (menu beside SQL); changes convert back to Simple</span>
         </div>
       </div>
     </div>

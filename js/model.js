@@ -342,11 +342,7 @@ function resolve(tables, implicit = false) {
           ? `${tt.name} has a primary key of several columns. Write -> ${tt.name}.Column`
           : `${tt.name} has no primary key. Write -> ${tt.name}.Column`;
       }
-      if (c.refError) problems.push(problem(c.line, c.refError));
-      else if (!(tt.pkCols.length === 1 && tt.pkCols[0] === c.targetCol) && !c.targetCol.unique) {
-        problems.push(problem(c.line, `${tt.name}.${c.targetCol.name} is neither the primary key nor unique. ` +
-          'The SQL adds an index on it, but normally it should be unique.', 'warn'));
-      }
+      if (c.refError) problems.push(problem(c.line, c.refError)); // what the database says about it: dialectProblems()
     }
   }
   for (const t of tables) {
@@ -360,20 +356,6 @@ function resolve(tables, implicit = false) {
       c.indexed = false;
       c.autoInc = c.isPk && t.pkCols.length === 1 && isIdName(c.name) && INT_TYPES.has(c.effType.split(/[ (]/)[0]);
       if (c.isPk && c.nullable) problems.push(problem(c.line, `${c.name} is a primary key and can't be null`));
-    }
-  }
-  for (const t of tables) {
-    for (const c of t.cols) {
-      if (!c.target || c.implicit) continue;
-      const tc = c.targetCol, a = keyType(c.effType), b = keyType(tc.effType);
-      const where = `${c.target.name}.${tc.name}`;
-      if (a === null || b === null) {
-        problems.push(problem(c.line, `${b === null ? where : c.name} is ${b === null ? tc.effType : c.effType}, ` +
-          'which can\'t be part of a foreign key. Use vc instead.'));
-      } else if (a !== b) {
-        problems.push(problem(c.line, `${c.name} is ${c.effType} but ${where} is ${tc.effType}. ` +
-          'A foreign key needs the same type on both sides.'));
-      }
     }
   }
   // Indexes: a one-column index is shown as a flag on its column, a longer one below the columns
