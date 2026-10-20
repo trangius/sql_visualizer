@@ -32,7 +32,7 @@
   --box-head-fg: #1c1812;
   --box-border: #d3cab2;
   --dv-s: 70%; --dv-l: 84%; /* data view row colours: saturation and lightness (the hue varies) */
-  --key-l: .55; --key-c: .15; /* key colours (PK/FK badges, key dots): OKLCH lightness and chroma */
+  --key-l: .52; --key-c: .11; /* key colours (PK/FK badges, key dots): OKLCH lightness and chroma */
   --row-hover: #f5efe2;
   --toast: #1c1812;
   --toast-fg: #faf6ee;
@@ -76,7 +76,7 @@
     --box-head: #1b1c1e;
     --box-head-fg: #d4ccbf;
     --box-border: #37383d;
-    --dv-s: 40%; --dv-l: 32%; --key-l: .76; --key-c: .12;
+    --dv-s: 40%; --dv-l: 32%; --key-l: .74; --key-c: .085;
     --row-hover: #232427;
     --toast: #d4ccbf;
     --toast-fg: #141414;
@@ -114,7 +114,7 @@
   --box-head: #1b1c1e;
   --box-head-fg: #d4ccbf;
   --box-border: #37383d;
-  --dv-s: 40%; --dv-l: 32%; --key-l: .76; --key-c: .12;
+  --dv-s: 40%; --dv-l: 32%; --key-l: .74; --key-c: .085;
   --row-hover: #232427;
   --toast: #d4ccbf;
   --toast-fg: #141414;

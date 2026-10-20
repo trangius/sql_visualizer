@@ -11,7 +11,8 @@
 //   tbl: table names   type: types   flag: pk/null/unique and SQL keywords
 //   arrow: "->" and SQL strings   ref: what an arrow points to, FK badges   com: comments
 // Optional: canvas, dot, hover, edge (arrows), boxBg, boxBorder, rowHover,
-// head/headFg (the table name bar; unset = same as the box), accentFg, accentSoft, sel.
+// head/headFg (the table name bar; unset = same as the box), accentFg, accentSoft, sel,
+// keyL/keyC (OKLCH lightness and chroma of the key colours), dvS/dvL (data view row colours).
 
 const THEMES = {
   bleak: {
@@ -20,14 +21,14 @@ const THEMES = {
       bg: '#f5efe2', panel: '#faf6ee', soft: '#f0e8d6', dot: '#dccfb4', line: '#e6dcc6', line2: '#dccfb4',
       fg: '#1c1812', muted: '#5e5440', faint: '#8a7e60', accent: '#3a4658', accentSoft: '#e5e0d2',
       sel: 'rgba(58, 70, 88, .18)', err: '#7a2e22', warn: '#7e5414',
-      boxBg: '#fffcf5', boxBorder: '#d3cab2', rowHover: '#f5efe2',
+      boxBg: '#fffcf5', boxBorder: '#d3cab2', rowHover: '#f5efe2', keyL: .52, keyC: .11,
       tok: { tbl: '#a25a00', type: '#2b5c94', flag: '#b0392a', arrow: '#4a7d12', ref: '#4a7d12', com: '#8a7e60' },
     },
     dark: {
       bg: '#101012', panel: '#1b1c1e', soft: '#232427', canvas: '#141414', dot: '#2c2d31', hover: '#2c2d31',
       line: '#2c2d31', line2: '#35363b', fg: '#d4ccbf', muted: '#a8a8a4', faint: '#5a5b5e',
       accent: '#8ab1c8', accentFg: '#141414', accentSoft: '#1f2a31', sel: 'rgba(138, 177, 200, .25)',
-      err: '#c4928e', warn: '#c8a878', edge: '#818387', boxBorder: '#37383d',
+      err: '#c4928e', warn: '#c8a878', edge: '#818387', boxBorder: '#37383d', keyL: .74, keyC: .085,
       tok: { tbl: '#c8a878', type: '#8ab1c8', flag: '#d4a8a0', arrow: '#a8c896', ref: '#a8c896', com: '#6e6f72' },
     },
   },
@@ -163,6 +164,23 @@ const THEMES = {
       tok: { tbl: '#f6c177', type: '#9ccfd8', flag: '#eb6f92', arrow: '#ebbcba', ref: '#c4a7e7', com: '#6e6a86' },
     },
   },
+  mono: {
+    name: 'Grayscale',
+    // four shades of grey for the text (strong, medium, soft, faint); keys tell apart by their symbols.
+    // Errors and warnings keep a little colour, to be seen.
+    light: {
+      bg: '#f2f2f2', panel: '#fafafa', soft: '#ebebeb', canvas: '#f5f5f5', dot: '#d9d9d9', line: '#e0e0e0', line2: '#cccccc',
+      fg: '#1a1a1a', muted: '#737373', faint: '#9e9e9e', accent: '#4d4d4d', err: '#a33a2e', warn: '#8a6414',
+      boxBg: '#ffffff', boxBorder: '#cccccc', rowHover: '#f0f0f0', keyL: .44, keyC: 0, dvS: '0%', dvL: '88%',
+      tok: { tbl: '#1a1a1a', type: '#737373', flag: '#4d4d4d', arrow: '#9e9e9e', ref: '#4d4d4d', com: '#9e9e9e' },
+    },
+    dark: {
+      bg: '#111111', panel: '#1a1a1a', soft: '#242424', canvas: '#141414', dot: '#2a2a2a', hover: '#2a2a2a',
+      line: '#2a2a2a', line2: '#363636', fg: '#e6e6e6', muted: '#999999', faint: '#6b6b6b', accent: '#bfbfbf',
+      accentFg: '#141414', err: '#d88a80', warn: '#d0b070', boxBorder: '#3a3a3a', keyL: .8, keyC: 0, dvS: '0%', dvL: '30%',
+      tok: { tbl: '#e6e6e6', type: '#999999', flag: '#bfbfbf', arrow: '#6b6b6b', ref: '#bfbfbf', com: '#6b6b6b' },
+    },
+  },
 };
 
 // The CSS variables for one variant of a theme (the names in style.css, without --)
@@ -179,6 +197,8 @@ function themeVars(key, dark) {
     'box-bg': box, 'box-head': c.head ?? box, 'box-head-fg': c.headFg ?? c.fg,
     'box-border': c.boxBorder ?? c.line2, 'row-hover': c.rowHover ?? c.soft,
     toast: c.fg, 'toast-fg': c.panel,
+    'key-l': c.keyL ?? (dark ? .76 : .55), 'key-c': c.keyC ?? (dark ? .12 : .15),
+    'dv-s': c.dvS ?? (dark ? '40%' : '70%'), 'dv-l': c.dvL ?? (dark ? '32%' : '84%'),
   };
   for (const [k, col] of Object.entries(c.tok)) v['tok-' + k] = col;
   return v;
