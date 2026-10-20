@@ -61,6 +61,13 @@ function hasIndex(t, c) {
     (t.indexes ?? []).some(ix => ix.cols[0]?.toLowerCase() === c.name.toLowerCase());
 }
 
+// [default now] is today's date in a date column, otherwise the current time
+function sqlDefault(c) {
+  const d = c.default;
+  if (d === 'now') return /^date\b/.test(c.effType) ? 'CURRENT_DATE' : 'CURRENT_TIMESTAMP';
+  return /^(null|true|false)$/.test(d) ? d.toUpperCase() : d;
+}
+
 function genSQL(tables) {
   const { order, cyclic } = topoOrder(tables.filter(t => t.cols.length));
   const out = ['-- MariaDB / MySQL', "SET sql_mode = 'STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION';", ''];
@@ -74,6 +81,7 @@ function genSQL(tables) {
     const w = Math.max(...t.cols.map(c => q(c.name).length));
     const defs = t.cols.map(c =>
       `  ${q(c.name).padEnd(w)} ${sqlType(c.effType)}${c.nullable ? ' NULL' : ' NOT NULL'}` +
+      `${c.default != null ? ' DEFAULT ' + sqlDefault(c) : ''}` +
       `${c.autoInc ? ' AUTO_INCREMENT' : ''}${c.unique ? ' UNIQUE' : ''}`);
     if (t.pkCols.length) defs.push(`  PRIMARY KEY (${t.pkCols.map(c => q(c.name)).join(', ')})`);
     for (const u of t.multiUniques ?? []) defs.push(`  UNIQUE (${u.cols.map(c => q(c.name)).join(', ')})`);
@@ -86,7 +94,8 @@ function genSQL(tables) {
     }
     for (const c of t.cols) {
       if (!c.target) continue;
-      const fk = `FOREIGN KEY (${q(c.name)}) REFERENCES ${q(c.target.name)}(${q(c.targetCol.name)})`;
+      const fk = `FOREIGN KEY (${q(c.name)}) REFERENCES ${q(c.target.name)}(${q(c.targetCol.name)})` +
+        `${c.onDelete ? ' ON DELETE ' + c.onDelete.toUpperCase() : ''}${c.onUpdate ? ' ON UPDATE ' + c.onUpdate.toUpperCase() : ''}`;
       if (created.has(c.target)) defs.push('  ' + fk);
       else deferred.push(`ALTER TABLE ${q(t.name)} ADD ${fk};`);
     }
@@ -274,8 +283,8 @@ function parseDef(p, acc, warn, error) {
     if (!p.isP('(')) p.ident();
     const cols = p.identList();
     if (!p.eatW('REFERENCES')) { warn(line, 'FOREIGN KEY without REFERENCES. Ignored.'); return; }
-    const rt = p.qname();
-    acc.fks.push({ cols, rt: rt?.v, rcols: p.identList(), line });
+    const rt = p.qname(), rcols = p.identList();
+    acc.fks.push({ cols, rt: rt?.v, rcols, line, ...fkActions(p) });
   } else if (p.eatW('UNIQUE')) {
     p.eatW('KEY', 'INDEX');
     if (!p.isP('(')) p.ident();
@@ -307,9 +316,36 @@ function createIndex(p, kind, line, findAcc, warn, error) {
   else if (!kind) acc.indexes.push({ name: name?.v ?? null, cols, line });
 }
 
-function skipAction(p) { // ON DELETE / ON UPDATE <action>
+function skipAction(p) { // ON UPDATE CURRENT_TIMESTAMP and the like
   if (p.eatW('SET', 'NO')) p.next();
   else p.next();
+}
+
+// ON DELETE / ON UPDATE after REFERENCES: { onDelete: 'cascade', onUpdate: 'set null' }
+function fkActions(p) {
+  const a = {};
+  while (p.isW('ON') && ['DELETE', 'UPDATE'].includes(p.t[p.i + 1]?.u)) {
+    p.next();
+    const key = p.next().u === 'DELETE' ? 'onDelete' : 'onUpdate';
+    const w = p.next();
+    a[key] = w?.u === 'SET' || w?.u === 'NO' ? `${w.v} ${p.next()?.v ?? ''}`.toLowerCase() : w?.v.toLowerCase();
+  }
+  return a;
+}
+
+// The value after DEFAULT, as Simple writes it: 0, 'text', null, true, now, or (an expression)
+function readDefault(p) {
+  if (p.isP('(')) return '(' + tokText(p.group()) + ')';
+  const neg = p.isP('-') ? p.next().v : '', x = p.next();
+  if (!x) return null;
+  if (x.t === 'str') return tokText([x]);
+  let v = neg + x.v;
+  if (/^\d/.test(x.v) && p.isP('.')) { p.next(); v += '.' + (p.isW() ? p.next().v : ''); }
+  const args = p.isP('(') ? p.group() : null; // NOW(), CURRENT_TIMESTAMP(3)
+  if (/^-?\d/.test(v)) return v;
+  if (['CURRENT_TIMESTAMP', 'NOW', 'LOCALTIMESTAMP', 'LOCALTIME', 'CURRENT_DATE', 'CURDATE'].includes(x.u)) return 'now';
+  if (['NULL', 'TRUE', 'FALSE'].includes(x.u)) return x.u.toLowerCase();
+  return '(' + v + (args ? '(' + tokText(args) + ')' : '') + ')';
 }
 
 function parseColumn(p, acc, warn, error) {
@@ -327,16 +363,13 @@ function parseColumn(p, acc, warn, error) {
     if (p.eatW('UNIQUE')) { p.eatW('KEY'); col.unique = true; continue; }
     if (p.eatW('PRIMARY')) { p.eatW('KEY'); col.pk = true; continue; }
     if (p.eatW('KEY')) { col.pk = true; continue; }
-    if (p.eatW('DEFAULT')) {
-      if (!p.group()) { if (p.isP('-')) p.next(); p.next(); p.group(); }
-      continue;
-    }
+    if (p.eatW('DEFAULT')) { const d = readDefault(p); if (d !== 'null') col.default = d; continue; } // null goes without saying
     if (p.eatW('ON')) { p.eatW('UPDATE', 'DELETE'); skipAction(p); continue; }
     if (p.eatW('COMMENT', 'CHARSET', 'COLLATE')) { p.next(); continue; }
     if (p.eatW('CHARACTER')) { p.eatW('SET'); p.next(); continue; }
     if (p.eatW('REFERENCES')) {
-      const rt = p.qname();
-      acc.fks.push({ cols: [col.name], rt: rt?.v, rcols: p.identList(), line });
+      const rt = p.qname(), rcols = p.identList();
+      acc.fks.push({ cols: [col.name], rt: rt?.v, rcols, line, ...fkActions(p) });
       continue;
     }
     if (p.eatW('CHECK')) { p.group(); warn(line, 'CHECK constraints are not shown. Ignored.'); continue; }
@@ -366,6 +399,9 @@ function finalizeTable(acc, warn, error) {
     unique: c.unique,
     ref: null,
     refCol: null,
+    onDelete: null,
+    onUpdate: null,
+    default: c.default ?? null,
     line: c.line,
   }));
   const find = n => cols.find(c => lc(c.name) === lc(n));
@@ -376,6 +412,8 @@ function finalizeTable(acc, warn, error) {
     if (!col) { error(fk.line, `Foreign key column ${fk.cols[0]} does not exist in ${acc.name}`); continue; }
     col.ref = fk.rt;
     col.refCol = fk.rcols[0] ?? null; // genText writes just "-> Table" when this is the table's primary key
+    col.onDelete = fk.onDelete ?? null;
+    col.onUpdate = fk.onUpdate ?? null;
   }
   return { name: acc.name, line: acc.line, cols, indexes: acc.indexes, uniques: acc.uniques }; // resolve() checks the uniques
 }

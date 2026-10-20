@@ -178,6 +178,8 @@
           <code class="t-flag">unique (A, B)</code><div>The combination is unique. Here: one dog per place at each show.</div>
           <code class="t-arrow">-&gt; Table</code><div>Foreign key to that table's primary key. The column inherits its type.</div>
           <code class="t-arrow">-&gt; T.Col</code><div>Foreign key to a specific (PK or unique) column.</div>
+          <code class="t-flag">[delete cascade]</code><div>Last on a <b>-&gt;</b> line: deleting the row it points to deletes this row too. <b>[delete set null]</b> empties the column instead (it must be <b>null</b>); <b>[update cascade]</b> follows a changed key.</div>
+          <code class="t-flag">[default 0]</code><div>The value when an INSERT leaves the column out: a number, <b>'text'</b>, <b>true</b>, <b>false</b> or <b>now</b>. Several go together: <b>[delete cascade, default 1]</b>.</div>
           <code class="t-arrow">OwnerId</code><div>With <b>Implicit</b> on (top bar), a column named table + Id gets an arrow to that table's PK, even without <b>-&gt;</b>. Diagram only: not a foreign key in the SQL.</div>
           <code class="t-type">vc</code><div>varchar(128). Other types as-is: int, text, date, datetime, decimal(8,2)…</div>
           <code class="t-com"># e.g. A, B</code><div>After a column: the values its sample data takes (<b>Sample data</b>, and the SQL export with it). <b># t.ex.</b> works too.</div>

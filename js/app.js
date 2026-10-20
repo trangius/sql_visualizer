@@ -8,8 +8,8 @@ const ta = $('#src'), hl = $('#hl'), gutter = $('#gutter');
 const hued = (cls, hue, text) => hue == null ? `<span class="${cls}">${text}</span>` : `<span class="${cls} h-hue" style="--h:${hue}">${text}</span>`;
 
 function hlTextLine(line, st, hues = {}) {
-  const hash = line.indexOf('#');
-  const code = hash >= 0 ? line.slice(0, hash) : line;
+  const hash = commentAt(line);
+  let code = hash >= 0 ? line.slice(0, hash) : line;
   const com = hash >= 0 ? `<span class="h-com">${esc(line.slice(hash))}</span>` : '';
   if (!code.trim()) return esc(code) + com;
   if (!/^\s/.test(code)) return `<span class="h-tbl">${esc(code)}</span>` + com;
@@ -18,6 +18,8 @@ function hlTextLine(line, st, hues = {}) {
     return esc(key[1]) + hued('h-flag', hues.key, esc(key[2])) + esc(key[3]) +
       key[4].split(/(,)/).map(p => p === ',' ? ',' : hued('h-col', hues.key, esc(p))).join('') + esc(key[5] + key[6]) + com;
   }
+  const bi = code.indexOf('['), opts = bi >= 0 ? code.slice(bi) : '';
+  if (bi >= 0) code = code.slice(0, bi);
   const ai = code.indexOf('->');
   const left = ai >= 0 ? code.slice(0, ai) : code;
   const m = left.match(/^(\s*)(\S*)([\s\S]*)$/);
@@ -25,6 +27,9 @@ function hlTextLine(line, st, hues = {}) {
   h += m[3].split(/(\s+)/).map(p =>
     !p.trim() ? esc(p) : FLAG.test(p) ? hued('h-flag', /pk/i.test(p) ? hues.pk : null, esc(p)) : `<span class="h-type">${esc(p)}</span>`).join('');
   if (ai >= 0) h += `<span class="h-arrow">-&gt;</span>` + hued('h-ref', hues.ref, esc(code.slice(ai + 2)));
+  // [delete cascade, default 'x']: the words as flags, quoted values as strings
+  h += opts.split(/('(?:[^']|'')*'?|\b(?:delete|update|default)\b)/i).map((p, i) =>
+    !p ? '' : i % 2 === 0 ? esc(p) : p[0] === "'" ? `<span class="h-str">${esc(p)}</span>` : `<span class="h-flag">${esc(p)}</span>`).join('');
   return h + com;
 }
 
@@ -170,7 +175,7 @@ ta.addEventListener('keydown', e => {
     // auto-indent: after a table name, indent; inside a table, keep the indentation
     const before = ta.value.slice(0, ta.selectionStart);
     const cur = before.slice(before.lastIndexOf('\n') + 1);
-    const code = cur.replace(/#.*$/, '');
+    const code = stripComment(cur);
     const indent = !code.trim() ? cur.match(/^\s*/)[0] : /^\s/.test(code) ? code.match(/^\s*/)[0] : '  ';
     e.preventDefault();
     insertText('\n' + indent);

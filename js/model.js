@@ -16,6 +16,12 @@ const DEFAULT_VC = 128;
 const INT_TYPES = new Set(['int', 'integer', 'bigint', 'smallint', 'mediumint', 'tinyint']);
 const problem = (line, msg, level = 'error') => ({ line, msg, level });
 const snap = v => Math.round(v / 10) * 10; // the diagram's 10px grid
+// Where a line's # comment starts, -1 for none. A # inside 'quotes' is text: [default '#fff']
+function commentAt(line) {
+  const code = line.match(/^(?:[^#']|'(?:[^']|'')*'?)*/)[0];
+  return code.length < line.length ? code.length : -1;
+}
+const stripComment = line => { const i = commentAt(line); return i < 0 ? line : line.slice(0, i); };
 
 // Applies f to a type outside its 'quoted' values, so enum('Small','Large') keeps its case
 const outsideQuotes = (t, f) => t.replace(/'(?:[^']|'')*'?|[^']+/g, m => m[0] === "'" ? m : f(m));
@@ -55,12 +61,44 @@ function sampleHint(line) {
   return m ? m[1].split(',').map(s => s.trim()).filter(Boolean) : null;
 }
 
+// What [ … ] after a column can say: what happens to it when the row it points to is deleted or
+// its key updated, and the value it gets when an INSERT leaves it out
+const FK_ACTIONS = ['cascade', 'set null', 'restrict', 'no action'];
+const splitOpts = s => (s.match(/(?:'(?:[^']|'')*'?|\([^)]*\)?|[^,'(])+/g) ?? []).map(x => x.trim()).filter(Boolean);
+const DEFAULT_VALUE = /^(-?\d+(\.\d+)?|'(?:[^']|'')*'|null|true|false|now|\(.*\))$/i;
+
+function parseOpts(s, col, line, problems) {
+  for (const item of splitOpts(s)) {
+    const m = item.match(/^(delete|update|default)\b\s*(.*)$/i);
+    if (!m) { problems.push(problem(line, `"${item}" in [ ] means nothing. Write delete …, update … or default …`)); continue; }
+    const what = m[1].toLowerCase(), v = m[2].trim();
+    if (what === 'default') {
+      if (!v) problems.push(problem(line, 'Write the value after default: [default 0]'));
+      else if (!DEFAULT_VALUE.test(v)) problems.push(problem(line, `Write text in quotes: [default '${v.replace(/'/g, "''")}']`));
+      else if (/^null$/i.test(v) && !col.nullable) problems.push(problem(line, `${col.name} can't default to null unless it is null`));
+      else if (!/^null$/i.test(v)) col.default = /^(true|false|now)$/i.test(v) ? v.toLowerCase() : v; // null goes without saying
+      continue;
+    }
+    const a = v.toLowerCase().replace(/\s+/g, ' ');
+    if (!col.ref) problems.push(problem(line, `[${what} …] is for a foreign key: write -> Table first`));
+    else if (!FK_ACTIONS.includes(a)) problems.push(problem(line, `Write ${what} cascade, ${what} set null or ${what} restrict`));
+    else if (a === 'set null' && !col.nullable) problems.push(problem(line, `${what} set null needs ${col.name} to be null`));
+    else col[what === 'delete' ? 'onDelete' : 'onUpdate'] = a;
+  }
+}
+
+// The [ … ] of a column, as genText and the table dialog write it
+function optsItems(c) {
+  return [c.ref && c.onDelete && 'delete ' + c.onDelete, c.ref && c.onUpdate && 'update ' + c.onUpdate,
+    c.default != null && 'default ' + c.default].filter(Boolean);
+}
+
 function parseText(src) {
   const tables = [], problems = [];
   let cur = null;
   src.split('\n').forEach((raw, i) => {
     const line = i + 1;
-    const code = raw.replace(/#.*$/, '');
+    const code = stripComment(raw);
     if (!code.trim()) return;
 
     if (!/^\s/.test(code)) {
@@ -102,7 +140,13 @@ function parseText(src) {
       return;
     }
 
-    const parts = code.split('->');
+    // "[delete cascade, default 0]" last on the line
+    const bi = code.indexOf('['), opts = bi >= 0 ? code.slice(bi + 1) : null;
+    if (opts != null && !/\]\s*$/.test(opts)) {
+      problems.push(problem(line, opts.includes(']') ? 'Write [ … ] last on the line' : 'Missing ] after the options'));
+      return;
+    }
+    const parts = (bi >= 0 ? code.slice(0, bi) : code).split('->');
     if (parts.length > 2) { problems.push(problem(line, 'Only one -> per column')); return; }
     let ref = null, refCol = null;
     if (parts.length === 2) {
@@ -126,7 +170,8 @@ function parseText(src) {
       problems.push(problem(line, `Column ${name} is defined twice in ${cur.name}`));
       return;
     }
-    const col = { name, type: null, pk: false, nullable: false, unique: false, ref, refCol, line, hint: sampleHint(raw) };
+    const col = { name, type: null, pk: false, nullable: false, unique: false, ref, refCol, line, hint: sampleHint(raw),
+      onDelete: null, onUpdate: null, default: null };
     const typeParts = [];
     for (const t of toks) {
       if (/^\(?index\)?$/i.test(t)) {
@@ -140,6 +185,7 @@ function parseText(src) {
       else col.unique = true;
     }
     col.type = typeParts.join(' ') || null;
+    if (opts != null) parseOpts(opts.replace(/\]\s*$/, ''), col, line, problems);
     cur.cols.push(col);
   });
   // pk on several columns reads like several keys; a key over several columns is written pk (A, B)
@@ -383,6 +429,8 @@ function genText(tables, notes) {
       if (c.nullable) parts.push('null');
       if (c.unique) parts.push('unique');
       if (c.ref) parts.push('-> ' + refText(c));
+      const opts = optsItems(c);
+      if (opts.length) parts.push(`[${opts.join(', ')}]`);
       out.push('  ' + parts.join(' '));
     }
     if (pkLine) out.push(`  pk (${t.pkCols.map(c => c.name).join(', ')})`);

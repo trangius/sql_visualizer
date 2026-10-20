@@ -16,7 +16,7 @@ $('#typeList').innerHTML = TYPE_SUGGESTIONS.map(t => `<option value="${t}">`).jo
 let dlg = null;
 
 const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, ref: null, refCol: null, comment: '' });
-const inlineComment = line => { const i = (line ?? '').indexOf('#'); return i >= 0 ? line.slice(i).trim() : ''; };
+const inlineComment = line => { const i = commentAt(line ?? ''); return i >= 0 ? line.slice(i).trim() : ''; };
 const lc = s => s.toLowerCase();
 const pointsToPk = c => c.target.pkCols.length === 1 && c.target.pkCols[0] === c.targetCol;
 
@@ -32,7 +32,7 @@ function textModel() {
 function blockRange(lines, start) {
   let end = start;
   for (let i = start + 1; i < lines.length; i++) {
-    const code = lines[i].replace(/#.*$/, '');
+    const code = stripComment(lines[i]);
     if (code.trim() && !/^\s/.test(code)) break;
     if (/^\s/.test(lines[i]) && lines[i].trim()) end = i;
   }
@@ -49,6 +49,7 @@ function openTableEditor(name, at = null) {
         name: c.name, origName: c.name, type: c.type ?? '', pk: c.pk || (!!t.pkLine && c.isPk), nullable: c.nullable, unique: c.unique,
         ref: !c.ref ? null : c.target === t || (!c.target && lc(c.ref) === lc(t.name)) ? SELF : c.target?.name ?? c.ref,
         refCol: !c.ref ? null : !c.target ? c.refCol : pointsToPk(c) ? null : c.targetCol.name,
+        onDelete: c.onDelete, onUpdate: c.onUpdate, default: c.default, // kept as they are: the dialog doesn't edit them
         comment: inlineComment(lines[c.line - 1]),
       }))
     : [{ ...blankCol(), name: 'Id' }, blankCol()];
@@ -354,6 +355,8 @@ function saveTable() {
       const refCol = self && c.refCol ? renamed.get(lc(c.refCol)) ?? c.refCol : c.refCol;
       parts.push('-> ' + (self ? name : c.ref) + (refCol ? '.' + refCol : ''));
     }
+    const opts = optsItems(c);
+    if (opts.length) parts.push(`[${opts.join(', ')}]`);
     block.push('  ' + parts.join(' ') + (c.comment ? '  ' + c.comment : ''));
   }
   if (pkLine) block.push(`  pk (${cols.filter(c => c.pk).map(c => c.name).join(', ')})`);

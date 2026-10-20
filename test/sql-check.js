@@ -51,6 +51,34 @@ City
   Id
   Country vc(2) -> Country
 `],
+  'delete, update and default': [`Owner
+  Id
+  Name vc(50) [default 'Anna ''Ann'' #1']  # comment
+  Code char(2) unique
+Pet
+  Id
+  OwnerId -> Owner [delete cascade]
+  OwnerCode null -> Owner.Code [delete set null, update cascade]
+  Born date [default now]
+  Added datetime [default now]
+  Weight decimal(5,2) [default -1.50]
+  Alive bool [default true]
+  Tag vc(20) null [default null]
+`],
+  'set null on a column that is not null': [`Owner
+  Id
+Pet
+  Id
+  OwnerId -> Owner [delete set null]
+`, 'delete set null needs OwnerId to be null'],
+  'default text without quotes': [`Pet
+  Id
+  Kind vc [default dog]  # 'a' comment
+`, "Write text in quotes: [default 'dog']"],
+  'delete without a foreign key': [`Pet
+  Id
+  Name [delete cascade]
+`, 'is for a foreign key'],
   'enum keeps its case': [`Shirt
   Id
   Size enum('Small','Large')
@@ -107,6 +135,13 @@ vm.runInContext(['model', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sampl
     }
     if (errors.length) fail(name, 'unexpected problems ' + JSON.stringify(errors));
     const script = ctx.genSQL(r.tables) + '\n' + await ctx.sampleInserts(r.tables);
+    // through the SQL tab and back gives the same Simple text
+    if (!sql) {
+      const back = vm.runInContext('(sql) => sqlToText(sql)', ctx)(ctx.genSQL(r.tables));
+      const strip = t => t.replace(/#.*$/gm, '').replace(/[ \t]+$/gm, '').trim().split(/\n\n+/).sort().join('\n\n'); // the SQL orders tables by their keys
+      const want = vm.runInContext('(src) => { const r = parseText(src); resolve(r.tables); return genText(r.tables, []); }', ctx)(src);
+      if (strip(back) !== strip(want)) fail(name, 'SQL and back changed it:\n' + back);
+    }
     if (name === 'enum keeps its case' && !script.includes("ENUM('Small','Large')")) fail(name, 'enum values changed case');
     if (/\b\w{65,}\b/.test(script.replace(/'[^']*'/g, ''))) fail(name, 'a name longer than 64 characters');
     if (!run) continue;
