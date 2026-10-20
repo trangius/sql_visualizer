@@ -54,11 +54,12 @@ function sqlType(t) {
 }
 
 // ─── Text syntax → model ─────────────────────────────────────────────────────
-// model: { tables: [{ name, line, cols: [{ name, type, pk, nullable, unique, ref, refCol, line }], pkLine, uniques }] }
+// model: { tables: [{ name, line, cols: [{ name, type, pk, nullable, unique, auto, ref, refCol, line }], pkLine, uniques }] }
+// auto: written auto_increment (or a_i); an integer Id that is the primary key on its own counts without it (autoInc)
 // ref/refCol: "-> Table" (its primary key, refCol null) or "-> Table.Column"
 // pkLine / uniques: keys over several columns, written on their own line: "pk (A, B)", "unique (A, B)"
 
-const FLAG = /^\(?(pk|null|unique)\)?$/i;
+const FLAG = /^\(?(pk|null|unique|auto_increment|a_i)\)?$/i;
 const KEY_LINE = /^\s+(pk|unique)\s*\(([^)]*)\)?\s*$/i;
 // The name an index gets in the SQL when none was given
 const indexName = (table, cols) => `idx_${table}_${cols.join('_')}`;
@@ -178,7 +179,7 @@ function parseText(src) {
       problems.push(problem(line, `Column ${name} is defined twice in ${cur.name}`));
       return;
     }
-    const col = { name, type: null, pk: false, nullable: false, unique: false, ref, refCol, line, hint: sampleHint(raw),
+    const col = { name, type: null, pk: false, nullable: false, unique: false, auto: false, ref, refCol, line, hint: sampleHint(raw),
       onDelete: null, onUpdate: null, default: null };
     const typeParts = [];
     for (const t of toks) {
@@ -190,7 +191,8 @@ function parseText(src) {
       if (!f) typeParts.push(t);
       else if (f[1].toLowerCase() === 'pk') col.pk = true;
       else if (f[1].toLowerCase() === 'null') col.nullable = true;
-      else col.unique = true;
+      else if (f[1].toLowerCase() === 'unique') col.unique = true;
+      else col.auto = true;
     }
     col.type = typeParts.join(' ') || null;
     if (opts != null) parseOpts(opts.replace(/\]\s*$/, ''), col, line, problems);
@@ -230,7 +232,7 @@ double real bit bool boolean serial char varchar binary varbinary tinytext text 
 blob mediumblob longblob enum set date datetime timestamp time year json uuid inet4 inet6 geometry point
 linestring polygon`.split(/\s+/));
 const TYPE_MODIFIERS = new Set(['unsigned', 'signed', 'zerofill', 'precision']);
-const FLAG_WORDS = ['pk', 'null', 'unique'];
+const FLAG_WORDS = ['pk', 'null', 'unique', 'auto_increment', 'a_i'];
 
 // What a foreign key compares: integers by size and sign, decimals by precision and scale,
 // strings without their length. null for TEXT, BLOB and JSON, which can't be keys at all.
@@ -366,7 +368,10 @@ function resolve(tables, implicit = false) {
       }
       c.isPk = t.pkCols.includes(c);
       c.indexed = false;
-      c.autoInc = solePk(t, c) && isIdName(c.name) && INT_TYPES.has(typeParts(c.effType).base);
+      // the database numbers the rows: an integer Id that is the key on its own, or auto_increment on such a column
+      const canAuto = solePk(t, c) && INT_TYPES.has(typeParts(c.effType).base);
+      c.autoInc = canAuto && (c.auto || isIdName(c.name));
+      if (c.auto && !canAuto) problems.push(problem(c.line, `auto_increment needs ${c.name} to be an integer primary key on its own`));
       if (c.isPk && c.nullable) problems.push(problem(c.line, `${c.name} is a primary key and can't be null`));
     }
   }
@@ -421,6 +426,7 @@ function genText(tables, notes) {
       if (c.isPk && !pkLine && (c.pk || t.pkLine)) parts.push('pk');
       if (c.nullable) parts.push('null');
       if (c.unique) parts.push('unique');
+      if (c.autoInc && !isIdName(c.name)) parts.push('auto_increment'); // on Id it goes without saying
       if (c.ref) parts.push('-> ' + refText(c));
       const opts = optsItems(c);
       if (opts.length) parts.push(`[${opts.join(', ')}]`);

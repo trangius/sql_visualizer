@@ -282,14 +282,15 @@ function parseColumn(p, acc, warn, error) {
   while (typeTok && p.isW('VARYING', 'PRECISION')) type += ' ' + p.next().v; // CHARACTER VARYING(50), DOUBLE PRECISION
   if (typeTok && p.isP('(')) type += '(' + tokText(p.group()) + ')';
   while (typeTok && p.isW('UNSIGNED', 'SIGNED', 'ZEROFILL')) type += ' ' + p.next().v;
-  const col = { name: nameTok.v, type, notNull: false, unique: false, pk: false, line };
+  const col = { name: nameTok.v, type, notNull: false, unique: false, pk: false, autoInc: false, line };
   while (!p.done) {
     if (p.eatW('NOT')) { if (p.eatW('NULL')) col.notNull = true; continue; }
-    if (p.eatW('NULL', 'AUTO_INCREMENT')) continue;
-    if (p.eatW('IDENTITY')) { p.group(); continue; } // SQL Server's IDENTITY(1,1)
+    if (p.eatW('NULL')) continue;
+    if (p.eatW('AUTO_INCREMENT', 'AUTOINCREMENT')) { col.autoInc = true; continue; } // MariaDB/MySQL, SQLite
+    if (p.eatW('IDENTITY')) { col.autoInc = true; p.group(); continue; } // SQL Server's IDENTITY(1,1)
     if (p.eatW('GENERATED')) { // Postgres: GENERATED … AS IDENTITY, or a computed column GENERATED ALWAYS AS (…)
       while (!p.done && !p.isW('IDENTITY') && !p.isP('(')) p.next();
-      p.eatW('IDENTITY');
+      if (p.eatW('IDENTITY')) col.autoInc = true;
       p.group();
       continue;
     }
@@ -359,6 +360,8 @@ function finalizeTable(acc, warn, error, dialect) {
     pk: !idIsPk && pkSet.has(lc(c.name)),
     nullable: !c.notNull && !pkSet.has(lc(c.name)) && !(c === id && !pkSet.size),
     unique: c.unique,
+    // SQLite: a lone INTEGER PRIMARY KEY written on the column is the rowid, numbered by the database
+    auto: c.autoInc || (dialect === 'sqlite' && c.pk && pkSet.size === 1 && /^integer$/i.test(c.type ?? '')),
     ref: null,
     refCol: null,
     onDelete: null,

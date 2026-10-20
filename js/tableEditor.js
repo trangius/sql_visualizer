@@ -11,11 +11,11 @@ const LINK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4
 const dlgEl = $('#tableDlg'), tdName = $('#tdName'), tdCols = $('#tdCols'), tdError = $('#tdError');
 $('#typeList').innerHTML = TYPE_SUGGESTIONS.map(t => `<option value="${t}">`).join('');
 
-// dlg: { orig, at, nameComment, tables, fk, cols: [{ name, origName, type, pk, nullable, unique, ref, refCol, comment }] }
+// dlg: { orig, at, nameComment, tables, fk, cols: [{ name, origName, type, pk, nullable, unique, auto, ref, refCol, comment }] }
 // dlg.fk: the open foreign-key chooser { row, table, usePk, col, filter }
 let dlg = null;
 
-const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, ref: null, refCol: null, comment: '' });
+const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, auto: false, ref: null, refCol: null, comment: '' });
 const inlineComment = line => { const i = commentAt(line ?? ''); return i >= 0 ? line.slice(i).trim() : ''; };
 const lc = s => s.toLowerCase();
 
@@ -45,7 +45,7 @@ function openTableEditor(name, at = null) {
   dlg = { orig: t?.name ?? null, at, tables, fk: null, nameComment: t ? inlineComment(lines[t.line - 1]) : '' };
   dlg.cols = t
     ? t.cols.map(c => ({
-        name: c.name, origName: c.name, type: c.type ?? '', pk: c.pk || (!!t.pkLine && c.isPk), nullable: c.nullable, unique: c.unique,
+        name: c.name, origName: c.name, type: c.type ?? '', pk: c.pk || (!!t.pkLine && c.isPk), nullable: c.nullable, unique: c.unique, auto: c.auto,
         ref: !c.ref ? null : c.target === t || (!c.target && lc(c.ref) === lc(t.name)) ? SELF : c.target?.name ?? c.ref,
         refCol: !c.ref ? null : !c.target ? c.refCol : pointsToPk(c) ? null : c.targetCol.name,
         onDelete: c.onDelete, onUpdate: c.onUpdate, default: c.default, // kept as they are: the dialog doesn't edit them
@@ -112,6 +112,7 @@ function renderCols() {
       <label class="chk" title="Primary key"><input type="checkbox" class="c-pk"${c.pk ? ' checked' : ''}></label>
       <label class="chk" title="May be NULL"><input type="checkbox" class="c-null"${c.nullable ? ' checked' : ''}></label>
       <label class="chk" title="UNIQUE"><input type="checkbox" class="c-unique"${c.unique ? ' checked' : ''}></label>
+      <label class="chk" title="AUTO_INCREMENT"><input type="checkbox" class="c-auto"${c.auto ? ' checked' : ''}></label>
       <div class="c-fk">${c.ref
         ? `<button class="fk-chip" data-act="fk" title="Change what this points to">→ ${esc(refLabel(c))}</button>` +
           `<button class="icon-x" data-act="unlink" title="Not a foreign key">×</button>`
@@ -129,6 +130,7 @@ function renderCols() {
 // Placeholders and checkboxes that depend on other fields (Id is the PK unless another column says pk)
 function refreshHints() {
   const explicitPk = dlg.cols.some(c => c.pk && c.name.trim());
+  const pkCount = dlg.cols.filter(c => c.pk && c.name.trim()).length;
   for (const row of tdCols.querySelectorAll('.col-row')) {
     const c = dlg.cols[+row.dataset.i];
     const isId = isIdName(c.name.trim());
@@ -140,6 +142,14 @@ function refreshHints() {
     const nul = row.querySelector('.c-null');
     nul.disabled = c.pk || autoPk;
     if (nul.disabled) { nul.checked = false; c.nullable = false; }
+    // auto_increment: only an integer column that is the primary key on its own; such an Id has it already
+    const auto = row.querySelector('.c-auto');
+    const canAuto = (autoPk || (c.pk && pkCount === 1)) && INT_TYPES.has(typeParts(normType(c.type.trim() || 'int')).base);
+    const implied = canAuto && isId;
+    if (!canAuto) c.auto = false;
+    auto.checked = canAuto && (c.auto || implied);
+    auto.disabled = !canAuto || implied;
+    auto.parentNode.title = implied ? 'Id is numbered by the database automatically' : canAuto ? 'AUTO_INCREMENT' : 'AUTO_INCREMENT needs an integer primary key on its own';
     row.querySelector('.c-type').placeholder = isId || c.ref ? 'int' : 'vc';
   }
 }
@@ -155,6 +165,7 @@ tdCols.addEventListener('input', e => {
   else if (cl.contains('c-pk')) c.pk = e.target.checked;
   else if (cl.contains('c-null')) c.nullable = e.target.checked;
   else if (cl.contains('c-unique')) c.unique = e.target.checked;
+  else if (cl.contains('c-auto')) c.auto = e.target.checked;
   e.target.classList.remove('invalid');
   refreshHints();
 });
@@ -349,6 +360,7 @@ function saveTable() {
     if (c.pk && !pkLine) parts.push('pk');
     if (c.nullable) parts.push('null');
     if (c.unique) parts.push('unique');
+    if (c.auto && !isIdName(c.name)) parts.push('auto_increment');
     if (c.ref) {
       const self = toSelf(c);
       const refCol = self && c.refCol ? renamed.get(lc(c.refCol)) ?? c.refCol : c.refCol;

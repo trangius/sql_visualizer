@@ -184,6 +184,7 @@
           <code class="t-flag">pk</code><div>Primary key. An explicit <b>pk</b> wins over <b>Id</b>.</div>
           <code class="t-flag">null</code><div>Column may be NULL (default is NOT NULL).</div>
           <code class="t-flag">unique</code><div>UNIQUE constraint — this is how 1‑1 is made.</div>
+          <code class="t-flag">auto_increment</code><div>The database numbers the rows itself. An integer <b>Id</b> gets this on its own; write it for another integer primary key. <b>a_i</b> for short.</div>
           <code class="t-flag">pk (A, B)</code><div>One primary key over several columns: only the combination must be unique, each column alone may repeat.</div>
           <code class="t-flag">unique (A, B)</code><div>The combination is unique. Here: one dog per place at each show.</div>
           <code class="t-arrow">-&gt; Table</code><div>Foreign key to that table's primary key. The column inherits its type.</div>
@@ -337,7 +338,7 @@
     <h2 id="tdTitle">New table</h2>
     <label class="field">Table name <input id="tdName" spellcheck="false" autocomplete="off"></label>
     <div class="col-grid col-head">
-      <span>Column</span><span>Type</span><span title="Primary key">PK</span><span title="May be NULL">Null</span><span>Unique</span><span>Foreign key</span><span></span>
+      <span>Column</span><span>Type</span><span title="Primary key">PK</span><span title="May be NULL">Null</span><span>Unique</span><span title="AUTO_INCREMENT">Auto inc</span><span>Foreign key</span><span></span>
     </div>
     <div id="tdCols"></div>
     <button id="tdAdd" class="btn-outline">+ Add column</button>
