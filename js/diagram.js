@@ -29,9 +29,10 @@ function displayType(c) {
   return m ? `varchar(${m[1] || DEFAULT_VC})${m[2]}` : t;
 }
 
-function rowInfo(c) {
+// In a key over several columns an FK keeps its FK badge: the key's dot shows it is part of the key
+function rowInfo(c, t) {
   return {
-    key: c.isPk ? 'PK' : c.ref || c.implicit ? 'FK' : '',
+    key: c.isPk && !(t.pkCols.length > 1 && c.ref) ? 'PK' : c.ref || c.implicit ? 'FK' : '',
     name: c.name,
     bold: c.isPk,
     flags: [c.nullable && 'null', c.unique && 'unique', c.indexed && 'index'].filter(Boolean).join(' '),
@@ -45,11 +46,53 @@ const shownCols = t => t.shown ?? t.cols;
 function markShown(tables) {
   const targeted = new Set(tables.flatMap(t => t.cols.map(c => c.targetCol).filter(Boolean)));
   for (const t of tables) t.shown = state.keysOnly ? t.cols.filter(c => c.isPk || c.ref || c.target || targeted.has(c)) : t.cols;
+  keyHues(tables);
 }
 
-// Indexes over several columns are listed below the rows: "index (ProductId, StartDate)"
+// Every key gets a colour of its own, and an FK the colour of the key it points to.
+// Hues step by the golden angle, so any number of them stay far apart on the wheel;
+// lightness and chroma come from the theme (--key-l, --key-c) and are even in OKLCH.
+// Handed out in table order: t.hue (its primary key), u.hue (its unique (…) keys),
+// c.keyHue (the hue an FK's badge gets).
+function keyHues(tables) {
+  let i = 0;
+  const next = () => Math.round((40 + i++ * 137.508) % 360);
+  const colHue = new Map(); // a column an FK points to that isn't its table's primary key
+  for (const t of tables) {
+    t.hue = t.pkCols.length ? next() : null;
+    for (const u of t.multiUniques ?? []) u.hue = next();
+  }
+  for (const t of tables) {
+    for (const c of t.cols) {
+      if (c.target) {
+        const tc = c.targetCol, pk = c.target.pkCols.length === 1 && c.target.pkCols[0] === tc;
+        if (!pk && !colHue.has(tc)) colHue.set(tc, next());
+        c.keyHue = pk ? c.target.hue : colHue.get(tc);
+      } else c.keyHue = c.isPk ? t.hue : null;
+    }
+  }
+}
+
+// Keys over several columns each get a colour: the pk the accent, every unique a hue of its own.
+// A dot in that colour marks the key's rows, one dot column per key in the left margin.
+const keyGroups = t => [
+  ...(t.pkCols.length > 1 ? [{ label: 'pk', cols: t.pkCols, hue: t.hue }] : []),
+  ...(t.multiUniques ?? []).map(u => ({ label: 'unique', cols: u.cols, hue: u.hue })),
+];
+// The dots sit between the badge and the name, one column of them per key
+const DOT_W = 9;
+const dotX = k => PAD_X + BADGE_W + 3 + k * DOT_W;
+const dotsLead = groups => groups.length * DOT_W; // how far the names move right for the dots
+const keyDot = (g, k, y) => `<circle class="kdot" style="--h:${g.hue}" cx="${dotX(k)}" cy="${y}" r="3"/>`;
+
+// Keys and indexes over several columns are listed below the rows: "unique (Name, Credits)"
 const FOOT_H = 22;
-const footLines = t => (t.multiIndexes ?? []).map(ix => `(${ix.cols.join(', ')})`);
+// { label, text, cols, group }: group is the key's dot column, null for an index
+const footLines = t => [
+  ...keyGroups(t).map((g, k) => ({ label: g.label, text: `(${g.cols.map(c => c.name).join(', ')})`, cols: g.cols.map(c => c.name), group: k })),
+  ...(t.multiIndexes ?? []).map(ix => ({ label: 'index', text: `(${ix.cols.join(', ')})`, cols: ix.cols, group: null })),
+];
+const footLabelW = foot => Math.max(0, ...foot.map(f => textW(f.label + ' ', FONTS.flags)));
 const footTop = n => ROWS_TOP + Math.max(1, n) * ROW_H + 6;
 
 // Data view: the box is a real table, column names across and a few sample rows below
@@ -98,11 +141,11 @@ function measureData(t) {
 
 function measureTable(t) {
   if (state.dataView) return measureData(t);
-  const rows = shownCols(t).map(rowInfo), foot = footLines(t);
+  const rows = shownCols(t).map(c => rowInfo(c, t)), foot = footLines(t), lead = dotsLead(keyGroups(t)), labelW = footLabelW(foot);
   const w = Math.max(MIN_W, textW(t.name, FONTS.head) + 2 * PAD_X + 12, ...rows.map(r =>
-    PAD_X + BADGE_W + GAP + textW(r.name, r.bold ? FONTS.pk : FONTS.name) + 16 +
+    PAD_X + lead + BADGE_W + GAP + textW(r.name, r.bold ? FONTS.pk : FONTS.name) + 16 +
     (r.flags ? textW(r.flags, FONTS.flags) + 6 : 0) + textW(r.type, FONTS.type) + PAD_X),
-    ...foot.map(f => 2 * PAD_X + textW('index ', FONTS.flags) + textW(f, FONTS.type)));
+    ...foot.map(f => (f.group != null ? PAD_X + BADGE_W + GAP + lead : PAD_X) + labelW + textW(f.text, FONTS.type) + PAD_X));
   const h = footTop(rows.length) + (foot.length ? foot.length * FOOT_H + 6 : 0);
   return { w: Math.ceil(w / 10) * 10, h, rows };
 }
@@ -446,6 +489,10 @@ text { dominant-baseline: central; }
 .key.fk { fill: var(--tok-ref, #525e1e); }
 .name { font: ${FONTS.name}; fill: var(--fg, #1c1812); }
 .row.pk .name { font-weight: 600; }
+.kdot { fill: oklch(var(--key-l, .55) var(--key-c, .15) var(--h)); }
+.key.hued { fill: oklch(var(--key-l, .55) var(--key-c, .15) var(--h)); }
+.keyline .hit { fill: transparent; }
+.keyline:hover .hit, .row.kh .hit { fill: var(--row-hover, #f5efe2); }
 .flags { font: ${FONTS.flags}; fill: var(--tok-flag, #6e3a2e); }
 .type { font: ${FONTS.type}; fill: var(--muted, #5e5440); }
 .row.bad .name, .row.bad .key { fill: var(--err, #7a2e22); }
@@ -604,14 +651,19 @@ function boxMarkup(t, b, interactive) {
   s += `<text class="title" x="${PAD_X}" y="${HEAD_H / 2}">${esc(t.name)}</text>`;
   if (b.data) return s + dataBoxBody(t, b, interactive) +
     `<rect class="outline" x=".5" y=".5" width="${w - 1}" height="${h - 1}" rx="${r - .5}"/></g>`;
+  const groups = keyGroups(t), lead = dotsLead(groups), nx = PAD_X + BADGE_W + GAP + lead;
   shownCols(t).forEach((c, i) => {
     const row = b.rows[i], y = rowY(i);
     const cls = 'row' + (c.isPk ? ' pk' : '') + (c.ref && !c.target ? ' bad' : '');
     s += `<g class="${cls}" data-key="${esc(t.name + '.' + c.name)}" data-line="${c.line}">`;
     if (c.ref && !c.target) s += `<title>${esc(c.refError)}</title>`;
     if (interactive) s += `<rect class="hit" x="1" y="${y - ROW_H / 2}" width="${w - 2}" height="${ROW_H}"/>`;
-    if (row.key) s += `<text class="key${row.key === 'FK' ? ' fk' : ''}" x="${PAD_X}" y="${y}">${row.key}</text>`;
-    s += `<text class="name" x="${PAD_X + BADGE_W + GAP}" y="${y}">${esc(row.name)}</text>`;
+    groups.forEach((g, k) => { if (g.cols.includes(c)) s += keyDot(g, k, y); });
+    if (row.key) {
+      const hue = row.key === 'PK' ? t.hue : c.keyHue;
+      s += `<text class="key${row.key === 'FK' ? ' fk' : ''}${hue == null ? '' : ' hued'}"${hue == null ? '' : ` style="--h:${hue}"`} x="${PAD_X}" y="${y}">${row.key}</text>`;
+    }
+    s += `<text class="name" x="${nx}" y="${y}">${esc(row.name)}</text>`;
     s += `<text class="type" x="${w - PAD_X}" y="${y}" text-anchor="end">${esc(row.type)}</text>`;
     if (row.flags) {
       const fx = w - PAD_X - textW(row.type, FONTS.type) - 6;
@@ -621,10 +673,16 @@ function boxMarkup(t, b, interactive) {
   });
   const foot = footLines(t), fy = footTop(b.rows.length);
   if (foot.length) s += `<line class="sep" x1="0" y1="${fy + .5}" x2="${w}" y2="${fy + .5}"/>`;
+  const labelW = footLabelW(foot);
   foot.forEach((f, k) => {
     const y = fy + 3 + (k + .5) * FOOT_H;
-    s += `<text class="flags" x="${PAD_X}" y="${y}">index</text>` +
-      `<text class="type" x="${PAD_X + textW('index ', FONTS.flags)}" y="${y}">${esc(f)}</text>`;
+    // hovering the line lights up its rows
+    s += `<g class="keyline" data-cols="${esc(f.cols.map(n => t.name + '.' + n).join('\n'))}">`;
+    if (interactive) s += `<rect class="hit" x="1" y="${y - FOOT_H / 2}" width="${w - 2}" height="${FOOT_H}"/>`;
+    if (f.group != null) s += keyDot(groups[f.group], f.group, y);
+    const lx = f.group != null ? nx : PAD_X;
+    s += `<text class="flags"${f.group != null ? ` style="fill:oklch(var(--key-l, .55) var(--key-c, .15) ${groups[f.group].hue})"` : ''} x="${lx}" y="${y}">${f.label}</text>` +
+      `<text class="type" x="${lx + labelW}" y="${y}">${esc(f.text)}</text></g>`;
   });
   s += `<rect class="outline" x=".5" y=".5" width="${w - 1}" height="${h - 1}" rx="${r - .5}"/></g>`;
   return s;
@@ -758,6 +816,9 @@ svg.addEventListener('mouseover', e => {
   // data view: hovering a row outlines its coloured cells and every cell with the same colour key
   const keys = new Set([...(e.target.closest('.drow')?.querySelectorAll('.dmark') ?? [])].map(m => m.dataset.k));
   vp.querySelectorAll('.dmark').forEach(m => m.classList.toggle('hl', keys.has(m.dataset.k)));
+  // a key or index line below the rows lights up the rows it is made of
+  const cols = new Set(e.target.closest('.keyline')?.dataset.cols.split('\n'));
+  vp.querySelectorAll('.row').forEach(r => r.classList.toggle('kh', cols.has(r.dataset.key)));
   if (edge) setHighlight([edge]);
   else if (tbl) highlightTable(tbl.dataset.t);
   else setHighlight([]);

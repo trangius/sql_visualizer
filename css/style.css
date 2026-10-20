@@ -32,6 +32,7 @@
   --box-head-fg: #1c1812;
   --box-border: #d3cab2;
   --dv-s: 70%; --dv-l: 84%; /* data view row colours: saturation and lightness (the hue varies) */
+  --key-l: .55; --key-c: .15; /* key colours (PK/FK badges, key dots): OKLCH lightness and chroma */
   --row-hover: #f5efe2;
   --toast: #1c1812;
   --toast-fg: #faf6ee;
@@ -75,7 +76,7 @@
     --box-head: #1b1c1e;
     --box-head-fg: #d4ccbf;
     --box-border: #37383d;
-    --dv-s: 40%; --dv-l: 32%;
+    --dv-s: 40%; --dv-l: 32%; --key-l: .76; --key-c: .12;
     --row-hover: #232427;
     --toast: #d4ccbf;
     --toast-fg: #141414;
@@ -113,7 +114,7 @@
   --box-head: #1b1c1e;
   --box-head-fg: #d4ccbf;
   --box-border: #37383d;
-  --dv-s: 40%; --dv-l: 32%;
+  --dv-s: 40%; --dv-l: 32%; --key-l: .76; --key-c: .12;
   --row-hover: #232427;
   --toast: #d4ccbf;
   --toast-fg: #141414;
@@ -338,12 +339,13 @@ main { flex: 1; display: flex; min-height: 0; }
 .code.wrap pre, .code.wrap textarea { white-space: pre-wrap; overflow-wrap: anywhere; }
 .code textarea { background: transparent; color: transparent; caret-color: var(--fg); resize: none; outline: none; }
 .code textarea::selection { background: var(--sel); }
-.h-tbl { color: var(--tok-tbl); }
+.h-tbl { color: var(--fg); } /* plain: the colours in the editor belong to the keys */
 .h-col { color: var(--fg); }
 .h-type { color: var(--tok-type); }
 .h-flag, .h-kw { color: var(--tok-flag); }
 .h-arrow { color: var(--tok-arrow); }
 .h-ref { color: var(--tok-ref); }
+.h-hue { color: oklch(var(--key-l) var(--key-c) var(--h)); } /* a key's colour, as in the diagram */
 .h-com { color: var(--tok-com); }
 .h-str { color: var(--tok-arrow); }
 .h-error { text-decoration: underline wavy var(--err); text-decoration-skip-ink: none; }

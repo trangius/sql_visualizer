@@ -62,6 +62,7 @@ function genSQL(tables) {
       `  ${q(c.name).padEnd(w)} ${sqlType(c.effType)}${c.nullable ? ' NULL' : ' NOT NULL'}` +
       `${c.autoInc ? ' AUTO_INCREMENT' : ''}${c.unique ? ' UNIQUE' : ''}`);
     if (t.pkCols.length) defs.push(`  PRIMARY KEY (${t.pkCols.map(c => q(c.name)).join(', ')})`);
+    for (const u of t.multiUniques ?? []) defs.push(`  UNIQUE (${u.cols.map(c => q(c.name)).join(', ')})`);
     for (const c of t.cols) {
       if (!c.target) continue;
       const fk = `FOREIGN KEY (${q(c.name)}) REFERENCES ${q(c.target.name)}(${q(c.targetCol.name)})`;
@@ -338,10 +339,6 @@ function finalizeTable(acc, warn, error) {
   }));
   const find = n => cols.find(c => lc(c.name) === lc(n));
 
-  for (const u of acc.uniques) {
-    if (u.cols.length === 1 && find(u.cols[0])) find(u.cols[0]).unique = true;
-    else warn(u.line, `UNIQUE (${u.cols.join(', ')}) over several columns can't be shown. Ignored.`);
-  }
   for (const fk of acc.fks) {
     if (fk.cols.length !== 1) { error(fk.line, `Composite foreign key (${fk.cols.join(', ')}) can't be drawn as one arrow`); continue; }
     const col = find(fk.cols[0]);
@@ -349,5 +346,5 @@ function finalizeTable(acc, warn, error) {
     col.ref = fk.rt;
     col.refCol = fk.rcols[0] ?? null; // genText writes just "-> Table" when this is the table's primary key
   }
-  return { name: acc.name, line: acc.line, cols, indexes: acc.indexes };
+  return { name: acc.name, line: acc.line, cols, indexes: acc.indexes, uniques: acc.uniques }; // resolve() checks the uniques
 }

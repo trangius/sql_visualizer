@@ -4,19 +4,27 @@
 
 const ta = $('#src'), hl = $('#hl'), gutter = $('#gutter');
 
-function hlTextLine(line) {
+// hues: the key colours on this line (see keyHues), { pk, ref, key }
+const hued = (cls, hue, text) => hue == null ? `<span class="${cls}">${text}</span>` : `<span class="${cls} h-hue" style="--h:${hue}">${text}</span>`;
+
+function hlTextLine(line, st, hues = {}) {
   const hash = line.indexOf('#');
   const code = hash >= 0 ? line.slice(0, hash) : line;
   const com = hash >= 0 ? `<span class="h-com">${esc(line.slice(hash))}</span>` : '';
   if (!code.trim()) return esc(code) + com;
   if (!/^\s/.test(code)) return `<span class="h-tbl">${esc(code)}</span>` + com;
+  const key = code.match(/^(\s+)(pk|unique)(\s*\()([^)]*)(\)?)([\s\S]*)$/i); // pk (A, B) / unique (A, B)
+  if (key) {
+    return esc(key[1]) + hued('h-flag', hues.key, esc(key[2])) + esc(key[3]) +
+      key[4].split(/(,)/).map(p => p === ',' ? ',' : hued('h-col', hues.key, esc(p))).join('') + esc(key[5] + key[6]) + com;
+  }
   const ai = code.indexOf('->');
   const left = ai >= 0 ? code.slice(0, ai) : code;
   const m = left.match(/^(\s*)(\S*)([\s\S]*)$/);
-  let h = esc(m[1]) + `<span class="h-col">${esc(m[2])}</span>`;
+  let h = esc(m[1]) + hued('h-col', hues.pk, esc(m[2]));
   h += m[3].split(/(\s+)/).map(p =>
-    !p.trim() ? esc(p) : FLAG.test(p) ? `<span class="h-flag">${esc(p)}</span>` : `<span class="h-type">${esc(p)}</span>`).join('');
-  if (ai >= 0) h += `<span class="h-arrow">-&gt;</span><span class="h-ref">${esc(code.slice(ai + 2))}</span>`;
+    !p.trim() ? esc(p) : FLAG.test(p) ? hued('h-flag', /pk/i.test(p) ? hues.pk : null, esc(p)) : `<span class="h-type">${esc(p)}</span>`).join('');
+  if (ai >= 0) h += `<span class="h-arrow">-&gt;</span>` + hued('h-ref', hues.ref, esc(code.slice(ai + 2)));
   return h + com;
 }
 
@@ -57,10 +65,11 @@ function decorateEditor(problems) {
   }
   const lines = ta.value.split('\n');
   const hlLine = state.mode === 'text' ? hlTextLine : hlSqlLine, hlState = {};
+  const hues = state.mode === 'text' && model ? lineHues(model.tables) : new Map();
   // one block per line, so a wrapped line's real height can be measured
   hl.innerHTML = lines.map((l, i) => {
     const p = byLine.get(i + 1);
-    const h = hlLine(l, hlState);
+    const h = hlLine(l, hlState, hues.get(i + 1));
     if (!p || !l.trim()) return `<div>${h || '<br>'}</div>`;
     const lead = l.match(/^\s*/)[0];
     return `<div>${lead}<span class="h-${p.level}">${h.slice(lead.length)}</span></div>`;
@@ -77,6 +86,19 @@ function decorateEditor(problems) {
 }
 
 let lastProblems = [];
+// The key colours of the diagram, by line: a primary key column in its table's colour, an arrow
+// in the colour of what it points to, a pk (…) / unique (…) line in its key's colour
+function lineHues(tables) {
+  keyHues(tables);
+  const by = new Map();
+  for (const t of tables) {
+    // a key over several columns colours its own line instead
+    for (const c of t.cols) by.set(c.line, { pk: c.isPk && t.pkCols.length === 1 ? t.hue : null, ref: c.target ? c.keyHue : null });
+    if (t.pkLine && t.pkCols.length > 1) by.set(t.pkLine.line, { key: t.hue });
+    for (const u of t.multiUniques ?? []) by.set(u.line, { key: u.hue });
+  }
+  return by;
+}
 const redecorate = () => decorateEditor(lastProblems);
 
 // Status bar: the first problem (click to jump there), and the diagram's size

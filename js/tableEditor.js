@@ -46,7 +46,7 @@ function openTableEditor(name, at = null) {
   dlg = { orig: t?.name ?? null, at, tables, fk: null, nameComment: t ? inlineComment(lines[t.line - 1]) : '' };
   dlg.cols = t
     ? t.cols.map(c => ({
-        name: c.name, origName: c.name, type: c.type ?? '', pk: c.pk, nullable: c.nullable, unique: c.unique,
+        name: c.name, origName: c.name, type: c.type ?? '', pk: c.pk || (!!t.pkLine && c.isPk), nullable: c.nullable, unique: c.unique,
         ref: !c.ref ? null : c.target === t || (!c.target && lc(c.ref) === lc(t.name)) ? SELF : c.target?.name ?? c.ref,
         refCol: !c.ref ? null : !c.target ? c.refCol : pointsToPk(c) ? null : c.targetCol.name,
         comment: inlineComment(lines[c.line - 1]),
@@ -342,10 +342,11 @@ function saveTable() {
   const toSelf = c => c.ref === SELF || (dlg.orig && c.ref && lc(c.ref) === lc(dlg.orig));
 
   const block = [name + (dlg.nameComment ? '  ' + dlg.nameComment : '')];
+  const pkLine = cols.filter(c => c.pk).length > 1; // a key over several columns gets its own line
   for (const c of cols) {
     const parts = [c.name];
     if (c.type) parts.push(c.type);
-    if (c.pk) parts.push('pk');
+    if (c.pk && !pkLine) parts.push('pk');
     if (c.nullable) parts.push('null');
     if (c.unique) parts.push('unique');
     if (c.ref) {
@@ -355,6 +356,7 @@ function saveTable() {
     }
     block.push('  ' + parts.join(' ') + (c.comment ? '  ' + c.comment : ''));
   }
+  if (pkLine) block.push(`  pk (${cols.filter(c => c.pk).map(c => c.name).join(', ')})`);
 
   histBegin(dlg.orig ? 'edit table' : 'new table');
   const lines = state.text.split('\n');
@@ -373,7 +375,11 @@ function saveTable() {
     if (name !== dlg.orig && pos[dlg.orig]) { pos[name] = pos[dlg.orig]; delete pos[dlg.orig]; }
     const [s, e] = blockRange(lines, t.line - 1);
     const comments = lines.slice(s + 1, e + 1).filter(l => /^\s+#/.test(l)); // keep comment lines inside the table
-    lines.splice(s, e - s + 1, block[0], ...comments, ...block.slice(1));
+    // and the unique (…) lines, following renamed columns; columns deleted in the dialog leave them
+    const uniques = t.uniques.filter(u => u.cols.length > 1).map(u => ({ cols: u.cols.map(n => renamed.get(lc(n)) ?? n), comment: inlineComment(lines[u.line - 1]) }))
+      .filter(u => u.cols.every(n => seen.has(lc(n))))
+      .map(u => `  unique (${u.cols.join(', ')})` + (u.comment ? '  ' + u.comment : ''));
+    lines.splice(s, e - s + 1, block[0], ...comments, ...block.slice(1), ...uniques);
     at = s + 1;
   } else {
     while (lines.length && !lines[lines.length - 1].trim()) lines.pop();

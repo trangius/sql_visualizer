@@ -165,12 +165,17 @@
   OwnerMail <span class="t-arrow">-&gt; Owner.Email</span>
 
 <span class="t-tbl">DogToShow</span>      <span class="t-com">← no Id = no PK…</span>
-  DogId <span class="t-flag">pk</span> <span class="t-arrow">-&gt; Dog</span>  <span class="t-com">← …unless pk</span>
-  ShowDate <span class="t-type">date</span></pre>
+  DogId <span class="t-arrow">-&gt; Dog</span>
+  ShowDate <span class="t-type">date</span>
+  Place <span class="t-type">int</span>
+  <span class="t-flag">pk</span> (DogId, ShowDate)     <span class="t-com">← …unless pk</span>
+  <span class="t-flag">unique</span> (ShowDate, Place)</pre>
         <div class="help-grid">
           <code class="t-flag">pk</code><div>Primary key. An explicit <b>pk</b> wins over <b>Id</b>.</div>
           <code class="t-flag">null</code><div>Column may be NULL (default is NOT NULL).</div>
           <code class="t-flag">unique</code><div>UNIQUE constraint — this is how 1‑1 is made.</div>
+          <code class="t-flag">pk (A, B)</code><div>One primary key over several columns: only the combination must be unique, each column alone may repeat.</div>
+          <code class="t-flag">unique (A, B)</code><div>The combination is unique. Here: one dog per place at each show.</div>
           <code class="t-arrow">-&gt; Table</code><div>Foreign key to that table's primary key. The column inherits its type.</div>
           <code class="t-arrow">-&gt; T.Col</code><div>Foreign key to a specific (PK or unique) column.</div>
           <code class="t-arrow">OwnerId</code><div>With <b>Implicit</b> on (top bar), a column named table + Id gets an arrow to that table's PK, even without <b>-&gt;</b>. Diagram only: not a foreign key in the SQL.</div>

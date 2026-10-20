@@ -36,10 +36,12 @@ function sqlType(t) {
 }
 
 // ─── Text syntax → model ─────────────────────────────────────────────────────
-// model: { tables: [{ name, line, cols: [{ name, type, pk, nullable, unique, ref, refCol, line }] }] }
+// model: { tables: [{ name, line, cols: [{ name, type, pk, nullable, unique, ref, refCol, line }], pkLine, uniques }] }
 // ref/refCol: "-> Table" (its primary key, refCol null) or "-> Table.Column"
+// pkLine / uniques: keys over several columns, written on their own line: "pk (A, B)", "unique (A, B)"
 
 const FLAG = /^\(?(pk|null|unique)\)?$/i;
+const KEY_LINE = /^\s+(pk|unique)\s*\(([^)]*)\)?\s*$/i;
 // The name an index gets in the SQL when none was given
 const indexName = (table, cols) => `idx_${table}_${cols.join('_')}`;
 
@@ -63,7 +65,7 @@ function parseText(src) {
         cur = { name, cols: [], indexes: [] };
         return;
       }
-      cur = { name, line, cols: [], indexes: [] };
+      cur = { name, line, cols: [], indexes: [], pkLine: null, uniques: [] };
       tables.push(cur);
       return;
     }
@@ -75,6 +77,18 @@ function parseText(src) {
 
     if (/^\s+index\b\s*(?:[\p{L}_][\p{L}\p{N}_$]*\s*)?\(/iu.test(code)) {
       problems.push(problem(line, 'Indexes are not supported in Simple mode.'));
+      return;
+    }
+
+    const key = code.match(KEY_LINE);
+    if (key) {
+      const names = key[2].split(',').map(n => n.trim());
+      if (!/\)\s*$/.test(code)) problems.push(problem(line, 'Missing ) after the column names'));
+      else if (names.some(n => !IDENT.test(n))) {
+        problems.push(problem(line, `Write ${key[1].toLowerCase()} (Column, Column) with the columns that together form the key`));
+      } else if (key[1].toLowerCase() === 'unique') cur.uniques.push({ cols: names, line });
+      else if (cur.pkLine) problems.push(problem(line, `${cur.name} already has a pk (…) line on line ${cur.pkLine.line}`));
+      else cur.pkLine = { cols: names, line };
       return;
     }
 
@@ -118,6 +132,13 @@ function parseText(src) {
     col.type = typeParts.join(' ') || null;
     cur.cols.push(col);
   });
+  // pk on several columns reads like several keys; a key over several columns is written pk (A, B)
+  for (const t of tables) {
+    const pks = t.cols.filter(c => c.pk);
+    if (pks.length > 1) problems.push(problem(pks[1].line, `${pks.map(c => c.name).join(' and ')} are ${pks.length > 2 ? 'all' : 'both'} marked pk, ` +
+      `which makes them one primary key together. Write pk (${pks.map(c => c.name).join(', ')}) if you mean that, ` +
+      'otherwise mark only one column pk.', 'warn'));
+  }
   return { tables, problems };
 }
 
@@ -183,6 +204,8 @@ function implicitTarget(c, lower) {
   return null;
 }
 
+const colNamed = (t, n) => t.cols.find(c => c.name.toLowerCase() === n.toLowerCase());
+
 function resolve(tables, implicit = false) {
   const problems = [];
   const exact = new Map(tables.map(t => [t.name, t]));
@@ -190,7 +213,40 @@ function resolve(tables, implicit = false) {
   for (const t of tables) {
     t.idCol = t.cols.find(c => isIdName(c.name)) || null;
     const explicit = t.cols.filter(c => c.pk);
+    if (t.pkLine) { // "pk (A, B)": as if pk were written on each of them
+      if (explicit.length) problems.push(problem(t.pkLine.line, 'Write the primary key either as pk (…) or as pk on a column, not both', 'warn'));
+      for (const n of t.pkLine.cols) {
+        const c = colNamed(t, n);
+        if (!c) problems.push(problem(t.pkLine.line, `${t.name} has no column ${n}`));
+        else if (!explicit.includes(c)) explicit.push(c);
+      }
+    }
     t.pkCols = explicit.length ? explicit : t.idCol ? [t.idCol] : [];
+    if (t.idCol && t.pkCols.length && !t.pkCols.includes(t.idCol)) {
+      const key = t.pkCols.map(c => c.name).join(', ');
+      problems.push(problem(t.idCol.line, `${t.idCol.name} is not the primary key here, ${t.pkCols.length > 1 ? `(${key})` : key} is. ` +
+        `Remove ${t.idCol.name}, or make it the key and write unique (${key}) instead.`, 'warn'));
+    }
+    // "unique (A, B)": the combination is unique. Over one column it is just the flag.
+    t.multiUniques = [];
+    for (const u of t.uniques ?? []) {
+      const cols = u.cols.map(n => colNamed(t, n));
+      const missing = u.cols.find((n, i) => !cols[i]);
+      if (missing) problems.push(problem(u.line, `${t.name} has no column ${missing}`));
+      else if (cols.length === 1) cols[0].unique = true;
+      else t.multiUniques.push({ cols, line: u.line });
+    }
+  }
+  // A key over several columns adds nothing when part of it is already unique by itself
+  for (const t of tables) {
+    const keys = [...(t.pkCols.length > 1 ? [{ cols: t.pkCols, line: t.pkLine?.line ?? t.pkCols[1].line, what: 'pk' }] : []),
+      ...t.multiUniques.map(u => ({ ...u, what: 'unique' }))];
+    for (const k of keys) {
+      const alone = k.cols.find(c => c.unique || (t.pkCols.length === 1 && t.pkCols[0] === c));
+      const hasPk = k.what === 'unique' && t.pkCols.length > 1 && t.pkCols.every(c => k.cols.includes(c));
+      if (alone || hasPk) problems.push(problem(k.line, `${alone ? alone.name : 'The primary key'} is already unique by itself, ` +
+        `so ${k.what} (${k.cols.map(c => c.name).join(', ')}) adds nothing`, 'warn'));
+    }
   }
   for (const t of tables) {
     if (!t.cols.length) problems.push(problem(t.line, `${t.name} has no columns`, 'warn'));
@@ -281,15 +337,18 @@ function genText(tables, notes) {
   tables.forEach((t, i) => {
     if (i) out.push('');
     out.push(t.name);
+    const pkLine = t.pkCols.length > 1; // only an explicit key can span several columns
     for (const c of t.cols) {
       const parts = [c.name];
       if (c.effType !== defaultType(c)) parts.push(c.effType);
-      if (c.pk) parts.push('pk');
+      if (c.isPk && !pkLine && (c.pk || t.pkLine)) parts.push('pk');
       if (c.nullable) parts.push('null');
       if (c.unique) parts.push('unique');
       if (c.ref) parts.push('-> ' + refText(c));
       out.push('  ' + parts.join(' '));
     }
+    if (pkLine) out.push(`  pk (${t.pkCols.map(c => c.name).join(', ')})`);
+    for (const u of t.multiUniques) out.push(`  unique (${u.cols.map(c => c.name).join(', ')})`);
   });
   return out.join('\n') + '\n';
 }
