@@ -18,12 +18,29 @@ let dlg = null;
 const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, auto: false, ref: null, refCol: null, comment: '' });
 const inlineComment = line => { const i = commentAt(line ?? ''); return i >= 0 ? line.slice(i).trim() : ''; };
 const lc = s => s.toLowerCase();
+const keyed = (cls, h) => ` class="${cls}${h == null ? '' : ' h-hue'}"${h == null ? '' : ` style="--h:${h}"`}`; // an element in a key's colour
+
+// The key colours of the diagram (see keyHues), so the dialog shows what the diagram shows
+const tableOf = key => key === SELF ? dlg.tables.find(t => t.name === dlg.orig) : dlg.tables.find(t => lc(t.name) === lc(key ?? ''));
+const tableHue = key => tableOf(key)?.hue ?? null;
+// what an arrow to a table (refCol null: its primary key) or one of its columns gets
+function refHue(key, refCol) {
+  const t = tableOf(key);
+  if (!t) return null;
+  if (!refCol) return t.pkCols.length === 1 ? t.hue : null;
+  const col = t.cols.find(c => lc(c.name) === lc(refCol));
+  if (!col) return null;
+  if (solePk(t, col)) return t.hue;
+  for (const o of dlg.tables) for (const c of o.cols) if (c.targetCol === col) return c.keyHue;
+  return null;
+}
 
 // The model of the text syntax, converting from SQL first if the SQL was edited last
 function textModel() {
   regenerate('text');
   const r = parseText(state.text);
   resolve(r.tables);
+  keyHues(r.tables);
   return r;
 }
 
@@ -114,7 +131,7 @@ function renderCols() {
       <label class="chk" title="UNIQUE"><input type="checkbox" class="c-unique"${c.unique ? ' checked' : ''}></label>
       <label class="chk" title="AUTO_INCREMENT"><input type="checkbox" class="c-auto"${c.auto ? ' checked' : ''}></label>
       <div class="c-fk">${c.ref
-        ? `<button class="fk-chip" data-act="fk" title="Change what this points to">→ ${esc(refLabel(c))}</button>` +
+        ? `<button${keyed('fk-chip', refHue(c.ref, c.refCol))} data-act="fk" title="Change what this points to">→ ${esc(refLabel(c))}</button>` +
           `<button class="icon-x" data-act="unlink" title="Not a foreign key">×</button>`
         : `<button class="icon-btn link" data-act="fk" title="Make this a foreign key">${LINK_ICON}</button>`}</div>
       <div class="c-actions">
@@ -138,6 +155,12 @@ function refreshHints() {
     const pk = row.querySelector('.c-pk');
     pk.checked = c.pk || autoPk;
     pk.disabled = autoPk;
+    // a primary key column in the table's colour, as in the diagram
+    const hue = pk.checked ? tableHue(SELF) : null;
+    for (const el of [pk, row.querySelector('.c-name')]) {
+      el.classList.toggle('h-hue', hue != null);
+      el.style.setProperty('--h', hue ?? '');
+    }
     pk.parentNode.title = autoPk ? 'Id is the primary key automatically' : 'Primary key';
     const nul = row.querySelector('.c-null');
     nul.disabled = c.pk || autoPk;
@@ -245,7 +268,7 @@ function renderFkPanel() {
   const fk = dlg.fk, { shown, table, usePk, col } = fkState();
   $('#fkTables').innerHTML = shown.length
     ? shown.map(t => `<button class="fk-item${t === table ? ' on' : ''}" data-act="fk-table" data-key="${esc(t.key === SELF ? '' : t.key)}" role="option" aria-selected="${t === table}">` +
-        `${esc(t.name)}${t.self ? ' <em>(this table)</em>' : ''}</button>`).join('')
+        `<span${keyed('', tableHue(t.key))}>${esc(t.name)}</span>${t.self ? ' <em>(this table)</em>' : ''}</button>`).join('')
     : '<div class="fk-empty">No table matches</div>';
 
   const pkBox = $('#fkUsePk');
@@ -257,12 +280,16 @@ function renderFkPanel() {
   if (!table) colsEl.innerHTML = '<div class="fk-empty">Choose a table</div>';
   else if (usePk) colsEl.innerHTML = '<div class="fk-empty">Untick "Primary key" to point to another column</div>';
   else colsEl.innerHTML = table.cols.map(c => {
-    const tags = (c.isPk ? ' <b>PK</b>' : '') + (c.unique ? ' <b>UNIQUE</b>' : '') + (!c.isPk && !c.unique ? ' <i>not unique</i>' : '');
+    const tag = ` <b${keyed('', refHue(table.key, c.name))}>`;
+    const tags = (c.isPk ? tag + 'PK</b>' : '') + (c.unique ? tag + 'UNIQUE</b>' : '') + (!c.isPk && !c.unique ? ' <i>not unique</i>' : '');
     return `<button class="fk-item${c.name === col ? ' on' : ''}" data-act="fk-col" data-col="${esc(c.name)}" role="option" aria-selected="${c.name === col}">` +
       `${esc(c.name)}:${esc(c.type)}${tags}</button>`;
   }).join('') || '<div class="fk-empty">This table has no columns yet</div>';
 
-  $('#fkPreview').textContent = table && col ? `→ ${table.name}.${col}` : '';
+  const preview = $('#fkPreview'), hue = table && col ? refHue(table.key, usePk ? null : col) : null;
+  preview.textContent = table && col ? `→ ${table.name}.${col}` : '';
+  preview.classList.toggle('h-hue', hue != null);
+  preview.style.setProperty('--h', hue ?? '');
   $('#fkOk').disabled = !(table && col);
   $('#fkTables .fk-item.on')?.scrollIntoView({ block: 'nearest' });
 }

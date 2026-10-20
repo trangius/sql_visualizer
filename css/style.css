@@ -586,10 +586,13 @@ body.presenting .card-tl, body.presenting #storageNotice, body.presenting #selec
 .fk-item em { font-style: normal; opacity: .65; font-family: inherit; }
 .fk-item b { font: 600 9.5px var(--mono); color: var(--accent); margin-left: 6px; letter-spacing: .02em; }
 .fk-item i { font: italic 11px var(--font); color: var(--warn); margin-left: 6px; }
-.fk-item.on i, .fk-item.on b { color: inherit; }
+.fk-item.on i, .fk-item.on b, .fk-item.on .h-hue { color: inherit; }
 .fk-empty { color: var(--muted); font-size: 12.5px; padding: 8px; }
 .fk-pk { display: flex; align-items: center; gap: 6px; font-size: 13px; height: 30px; cursor: pointer; }
 .fk-pk input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
 .fk-foot { display: flex; align-items: center; gap: 8px; }
 .fk-foot .btn-outline, .fk-foot .btn-primary { height: 30px; border-radius: 7px; }
 #fkPreview { font: 12.5px var(--mono); color: var(--tok-ref); }
+/* the diagram's key colours: a primary key column and its box, an arrow's target, in the chooser the tables and their keys */
+.dlg .h-hue, .dlg input.c-name.h-hue, #fkPreview.h-hue { color: oklch(var(--key-l) var(--key-c) var(--h)); }
+.dlg input.h-hue { accent-color: oklch(var(--key-l) var(--key-c) var(--h)); }
