@@ -905,12 +905,14 @@ function diagramVisible() {
   return x0 >= 0 && y0 >= CARD_TOP - 20 && x0 + bb.w * view.s <= r.width && y0 + bb.h * view.s <= r.height - CARD_BOTTOM + 20;
 }
 
-function fit(maxZoom = 1.25) {
+// keepZoom: stay at the current zoom if the whole diagram fits at it (just centre it)
+function fit(maxZoom = 1.25, keepZoom = false) {
   const r = svg.getBoundingClientRect();
   const bb = contentBounds(20);
   if (!r.width) return;
   if (!bb) { view.s = 1; view.tx = 40; view.ty = 80; applyView(); return; }
-  view.s = Math.max(ZOOM_MIN, Math.min(maxZoom, (r.width - 96) / bb.w, (r.height - CARD_TOP - CARD_BOTTOM - 30) / bb.h));
+  const s = Math.min(maxZoom, (r.width - 96) / bb.w, (r.height - CARD_TOP - CARD_BOTTOM - 30) / bb.h);
+  view.s = keepZoom && view.s <= s ? view.s : Math.max(ZOOM_MIN, s);
   view.tx = (r.width - bb.w * view.s) / 2 - bb.x * view.s;
   view.ty = CARD_TOP + (r.height - CARD_TOP - CARD_BOTTOM - bb.h * view.s) / 2 - bb.y * view.s;
   applyView();
@@ -1026,7 +1028,7 @@ function autoLayout() {
   saveDoc();
   drawDiagram();
 }
-$('#layoutBtn').onclick = () => { autoLayout(); fit(); };
+$('#layoutBtn').onclick = () => { autoLayout(); fit(undefined, true); };
 
 // Do any two boxes overlap? (e.g. positions saved while boxes had other sizes)
 function boxesOverlap() {

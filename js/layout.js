@@ -17,6 +17,11 @@ function canvasAspect() {
   const r = svg.getBoundingClientRect();
   return r.width && r.height ? Math.min(2.5, Math.max(0.8, r.width / r.height)) : 1.5;
 }
+// The room a diagram has on the canvas at the current zoom, in diagram units (as fit() measures it)
+function canvasRoom() {
+  const r = svg.getBoundingClientRect();
+  return r.width ? { w: (r.width - 96) / view.s, h: (r.height - CARD_TOP - CARD_BOTTOM - 30) / view.s } : null;
+}
 
 // FK arrows between different tables, with row offsets inside each box
 function layoutEdges(tables) {
@@ -132,9 +137,10 @@ function bestSpot(t, placed, dims, edges, anchor = null) {
 // sideways between neighbouring columns (a junction table sits between its two tables).
 // Within a column tables are ordered like their neighbours (fewer crossings) and moved
 // up or down so an FK row lines up with its PK row (straight arrows). Gaps grow with the
-// number of arrows passing through. Finally neighbouring tables in a column are swapped
-// while that gives fewer jumps in the arrows as actually drawn.
-const AUTO = { COL_GAP: 90, ROW_GAP: 50, LANE: 16, COMP_GAP: 120, POLISH_MS: 400 };
+// number of arrows passing through. Finally neighbouring tables in a column are swapped,
+// and lookup tables tucked above or below the table pointing to them, while that gives
+// better arrows as actually drawn, or a block that fits the canvas without zooming out.
+const AUTO = { COL_GAP: 90, ROW_GAP: 50, LANE: 16, COMP_GAP: 120, POLISH_MS: 400, OVERFLOW: 3 };
 
 function arrangeAll(tables, dims) {
   if (!tables.length) return;
@@ -304,19 +310,27 @@ function layoutGroup(nodes, dims, edges, deadline) {
   const place = () => placeColumns(cols, colOf, dims, edges);
   let placed = place();
   // Lookup tables: point nowhere, and only one table points to them (Artist, Label, …).
-  // Such a table may also sit right above or below that one table, in its column, to
-  // leave the gap to the next column to a bigger table (AlbumToArtist → Album).
+  // Such a table may also sit right above or below that one table, in its column: to
+  // leave the gap to the next column to a bigger table (AlbumToArtist → Album), or to
+  // keep the block within the canvas at the current zoom (Course → Teacher on a tall canvas).
   const referrers = t => new Set(edges.filter(e => e.to === t && e.from !== t).map(e => e.from));
   const lookups = nodes.filter(t => !edges.some(e => e.from === t && e.to !== t) && referrers(t).size === 1);
   // polish: try swapping neighbours in a column, and moving lookup tables next to the
   // table that points to them; keep whatever makes the drawn arrows better
   if (!state.dataView) {
-    let cost = drawnCost(nodes, placed);
+    const room = canvasRoom();
+    const overflow = p => { // how far the block sticks out of the canvas, each way
+      if (!room) return 0;
+      const bb = bboxOf([...p.values()]);
+      return Math.max(0, bb.w - room.w) + Math.max(0, bb.h - room.h);
+    };
+    const costOf = p => drawnCost(nodes, p) + AUTO.OVERFLOW * overflow(p);
+    let cost = costOf(placed);
     const attempt = change => {
       const saved = cols.map(col => [...col]);
       change();
       reindex();
-      const p = place(), c = drawnCost(nodes, p);
+      const p = place(), c = costOf(p);
       if (c < cost) { cost = c; placed = p; return true; }
       cols.length = 0;
       cols.push(...saved);
@@ -329,9 +343,6 @@ function layoutGroup(nodes, dims, edges, deadline) {
       for (const t of lookups) {
         const [child] = referrers(t);
         if (colOf(t) === colOf(child)) continue;
-        // only to make room: the table pointing to it also points to a bigger table in its column
-        const rivals = edges.some(e => e.from === child && e.to !== t && colOf(e.to) === colOf(t) && !lookups.includes(e.to));
-        if (!rivals) continue;
         for (const below of [false, true]) {
           if (performance.now() >= deadline) break;
           const moved = attempt(() => {

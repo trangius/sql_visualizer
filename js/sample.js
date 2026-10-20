@@ -245,11 +245,11 @@ function makePerson(lang, role, seed, i) {
 function sampleValue(t, c, i, ctx) {
   const ti = typeInfo(c), key = `${t.name}.${c.name}.${i}`;
   const v = rawValue(t, c, i, ctx, ti, key);
-  return fit(v, ti, key);
+  return fitValue(v, ti, key);
 }
 
 // A value to the column's type: numbers within range and scale, text within its length
-function fit(v, ti, key) {
+function fitValue(v, ti, key) {
   if (v == null) return null;
   if (ti.int || ti.dec) {
     let n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
@@ -494,7 +494,7 @@ function sampleData(tables, n = SAMPLE_ROWS) {
           keys.forEach((k, j) => k != null && seen[j].add(k));
           for (const [c, fk, from] of copies) {
             const o = data.get(fk.target).find(o => o.values.get(fk.targetCol) === r.values.get(fk));
-            if (o?.values.get(from) != null) r.values.set(c, fit(+o.values.get(from), typeInfo(c), ''));
+            if (o?.values.get(from) != null) r.values.set(c, fitValue(+o.values.get(from), typeInfo(c), ''));
           }
           if (copies.length && qty && r.values.get(qty) != null) {
             r.ctx.total = +r.values.get(qty) * +r.values.get(copies[0][0]);
