@@ -1062,8 +1062,8 @@ function embeddedFontCss() {
   return fontCssPromise;
 }
 
-// An export uses the light variant of the chosen theme on white (print-ready)
-const exportVars = () => Object.entries({ ...themeVars(themeKey(), false), canvas: '#fff' }).map(([k, v]) => `--${k}: ${v};`).join(' ');
+// An export looks as the diagram does on screen: the chosen theme, light or dark, on its canvas colour
+const exportVars = () => Object.entries(themeVars(themeKey(), isDark())).map(([k, v]) => `--${k}: ${v};`).join(' ');
 
 async function exportMarkup() {
   const bb = contentBounds(30);
@@ -1073,7 +1073,7 @@ async function exportMarkup() {
     bb,
     svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${bb.w}" height="${bb.h}" viewBox="${bb.x} ${bb.y} ${bb.w} ${bb.h}"` +
       `><style>${fonts}svg { ${exportVars()} }${DIAGRAM_CSS}</style>` +
-      `<rect x="${bb.x}" y="${bb.y}" width="${bb.w}" height="${bb.h}" fill="#fff"/>${diagramMarkup(false)}</svg>`,
+      `<rect x="${bb.x}" y="${bb.y}" width="${bb.w}" height="${bb.h}" style="fill: var(--canvas)"/>${diagramMarkup(false)}</svg>`,
   };
 }
 function download(blob, name) {
