@@ -49,9 +49,9 @@
     <svg width="14" height="14" class="ico thin" aria-hidden="true"><circle cx="4.5" cy="7" r="2.5"/><path d="M7 7h5.5M10.5 7v2M12.5 7v1.5"/></svg>
     <span class="lbl">Keys only</span>
   </button>
-  <button id="dataBtn" class="tool" aria-pressed="false" title="Data view: every table shows a few made-up rows, with an arrow from each foreign key value to the row it points to">
+  <button id="dataBtn" class="tool" aria-pressed="false" title="Sample data: every table shows a few made-up rows, with an arrow from each foreign key value to the row it points to">
     <svg width="14" height="14" class="ico thin" aria-hidden="true"><rect x="1.5" y="2" width="11" height="10" rx="1.5"/><path d="M1.5 5.5h11M1.5 8.8h11M5.5 5.5V12"/></svg>
-    <span class="lbl">Data</span>
+    <span class="lbl">Sample data</span>
   </button>
   <div class="menu-wrap">
     <button id="exportBtn" class="btn-primary" aria-haspopup="menu" aria-expanded="false">
@@ -180,7 +180,7 @@
           <code class="t-arrow">-&gt; T.Col</code><div>Foreign key to a specific (PK or unique) column.</div>
           <code class="t-arrow">OwnerId</code><div>With <b>Implicit</b> on (top bar), a column named table + Id gets an arrow to that table's PK, even without <b>-&gt;</b>. Diagram only: not a foreign key in the SQL.</div>
           <code class="t-type">vc</code><div>varchar(128). Other types as-is: int, text, date, datetime, decimal(8,2)…</div>
-          <code class="t-com"># e.g. A, B</code><div>After a column: the values its made-up data takes (<b>Data</b> view, SQL with data). <b># t.ex.</b> works too.</div>
+          <code class="t-com"># e.g. A, B</code><div>After a column: the values its sample data takes (<b>Sample data</b>, and the SQL export with it). <b># t.ex.</b> works too.</div>
         </div>
         <div class="hsep"></div>
         <div class="help-keys">
@@ -256,14 +256,14 @@
     </div>
 
     <div id="dataLangCard" class="card card-tr" hidden>
-      <span class="card-text">Made-up data in</span>
+      <span class="card-text">Sample data in</span>
       <div class="menu-wrap">
-        <button id="dataLangBtn" class="tool" aria-haspopup="menu" aria-expanded="false" title="Language of the made-up data: guessed from the names in the diagram, or chosen here">
+        <button id="dataLangBtn" class="tool" aria-haspopup="menu" aria-expanded="false" title="Language of the sample data: guessed from the names in the diagram, or chosen here">
           <span id="dataLangLbl"></span>
           <svg width="12" height="16" class="ico chev" aria-hidden="true"><path d="M2.5 6.5 6 10l3.5-3.5"/></svg>
         </button>
         <div id="dataLangMenu" class="menu" role="menu" hidden>
-          <div class="menu-label">Language of the data</div>
+          <div class="menu-label">Language of the sample data</div>
           <div id="dataLangList"></div>
         </div>
       </div>
