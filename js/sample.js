@@ -104,6 +104,7 @@ function prepareKinds(sk) {
     irregular: Object.assign({}, ...langs.map(l => sk.languages[l].irregular)),
     flags: new Set(langs.flatMap(l => sk.languages[l].flags)),
     letters: Object.fromEntries(langs.map(l => [l, sk.languages[l].letters])),
+    names: Object.fromEntries(langs.map(l => [l, sk.languages[l].name])),
     fields: columns('fields', true), person: columns('person'), generic: columns('generic'),
     byLang: Object.fromEntries(langs.map(l => [l, Object.values(sk.columns).flatMap(g => Object.values(g).map(by => by[l]).filter(Boolean)).map(r => new RegExp(r))])),
   };
@@ -410,19 +411,29 @@ function schemaLang(tables) {
   return K.langs.reduce((a, b) => score[b] > score[a] ? b : a, 'en');
 }
 
-// The language of the diagram, if its data is loaded; otherwise null, and the loading
-// starts (the diagram is drawn again when it is done). A language that has no file of
-// its own (yet) falls back to English. A file that fails isn't asked for again.
+// The languages there is data for, [{ id, name }] (null until kinds.js is loaded),
+// the one guessed from a diagram's names, and the one used: chosen in the Data view
+// (state.sampleLang, per diagram) or else guessed. A language whose file is missing or
+// fails falls back to English; the file isn't asked for again.
 const failed = new Set();
+const sampleLangs = () => K && K.langs.map(id => ({ id, name: K.names[id] }));
+const sampleGuess = tables => K && schemaLang(tables);
+function sampleLang(tables) {
+  if (!K) return null;
+  const lang = K.langs.includes(state.sampleLang) ? state.sampleLang : schemaLang(tables);
+  return failed.has(lang) ? 'en' : lang;
+}
+
+// The language to make data in, if its data is loaded; otherwise null, and the loading
+// starts (onSampleData() is called when it is done, to draw the diagram again)
 function readyLang(tables) {
   if (!K) {
-    if (!failed.has('kinds')) loadSampleKinds().then(k => { if (!k) failed.add('kinds'); drawDiagram(); });
+    if (!failed.has('kinds')) loadSampleKinds().then(k => { if (!k) failed.add('kinds'); onSampleData(); });
     return null;
   }
-  let lang = schemaLang(tables);
-  if (failed.has(lang)) lang = 'en';
+  const lang = sampleLang(tables);
   if (langData(lang)) return lang;
-  if (!failed.has(lang)) loadSampleLang(lang).then(d => { if (!d) failed.add(lang); drawDiagram(); });
+  if (!failed.has(lang)) loadSampleLang(lang).then(d => { if (!d) failed.add(lang); onSampleData(); });
   return null;
 }
 
@@ -430,10 +441,10 @@ function readyLang(tables) {
 // Empty until the data has arrived (the diagram is drawn again then).
 const sampleCache = new WeakMap();
 function sampleData(tables, n = SAMPLE_ROWS) {
-  const cached = sampleCache.get(tables)?.get(n);
-  if (cached) return cached;
   const lang = readyLang(tables);
   if (!lang) return new Map(tables.map(t => [t, []]));
+  const cached = sampleCache.get(tables)?.get(n + lang);
+  if (cached) return cached;
   const data = new Map(), plans = new Map();
   for (const t of tables) {
     const kind = kindOf(t.name);
@@ -494,14 +505,14 @@ function sampleData(tables, n = SAMPLE_ROWS) {
   };
   tables.forEach(finish);
   if (!sampleCache.has(tables)) sampleCache.set(tables, new Map());
-  sampleCache.get(tables).set(n, data);
+  sampleCache.get(tables).set(n + lang, data);
   return data;
 }
 
 // INSERT statements for the sample rows (appended to the MariaDB script), 20 per table
 async function sampleInserts(tables) {
   if (await loadSampleKinds()) {
-    const lang = schemaLang(tables);
+    const lang = sampleLang(tables);
     if (!(await loadSampleLang(lang))) { failed.add(lang); await loadSampleLang('en'); }
   }
   const data = sampleData(tables, 20);

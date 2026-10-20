@@ -202,7 +202,8 @@ ta.addEventListener('input', () => {
 // `state` holds the preferences plus the active diagram's fields; `pos` its box positions.
 const SETTINGS = ['colors', 'fontSize', 'wrap', 'notation', 'implicit', 'keysOnly', 'dataView', 'panel', 'leftW'];
 // base: the text the diagram was created with (an example, or empty), to tell whether it has changed
-const DOC_DEFAULTS = { text: '', sql: '', mode: 'text', textStale: false, sqlStale: true, base: null };
+// sampleLang: the language of the data view's made-up rows, null = guessed from the names
+const DOC_DEFAULTS = { text: '', sql: '', mode: 'text', textStale: false, sqlStale: true, base: null, sampleLang: null };
 const docKey = id => 'doc.' + id;
 const newDocId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 // a new diagram is named after its first comment line ("# School database")
@@ -317,6 +318,7 @@ function update() {
   model = r;
   decorateEditor(r.problems);
   drawDiagram();
+  if (state.dataView) renderDataLang(); // the guess may change as names are typed
 }
 
 // Bring the text (or SQL) up to date after the other side was edited.
@@ -497,7 +499,34 @@ function applyDataView() {
   const b = $('#dataBtn');
   b.classList.toggle('on', state.dataView);
   b.setAttribute('aria-pressed', String(state.dataView));
+  renderDataLang();
 }
+// On the canvas while it is on: the language of the data, guessed or chosen
+function renderDataLang() {
+  const langs = state.dataView ? sampleLangs() : null;
+  $('#dataLangCard').hidden = !langs;
+  if (!langs) return;
+  const guess = sampleGuess(model.tables), shown = sampleLang(model.tables);
+  $('#dataLangLbl').textContent = langs.find(l => l.id === shown)?.name ?? shown;
+  const item = (id, name) => `<button role="menuitemradio" aria-checked="${state.sampleLang === id}" data-lang="${id ?? ''}">` +
+    `<span class="check">${state.sampleLang === id ? '✓' : ''}</span><span class="item-name">${esc(name)}</span></button>`;
+  $('#dataLangList').innerHTML = item(null, `Guess (${langs.find(l => l.id === guess)?.name ?? guess})`) + langs.map(l => item(l.id, l.name)).join('');
+}
+// the data has arrived (see sample.js): draw it, and the language it is in
+function onSampleData() {
+  drawDiagram();
+  renderDataLang();
+}
+$('#dataLangList').addEventListener('click', e => {
+  const b = e.target.closest('[data-lang]');
+  if (!b) return;
+  closeMenus();
+  state.sampleLang = b.dataset.lang || null;
+  saveDoc();
+  drawDiagram();
+  autoLayout(); // other words, other widths
+  renderDataLang();
+});
 $('#dataBtn').onclick = () => {
   state.dataView = !state.dataView;
   applyDataView();
@@ -561,7 +590,7 @@ function registerMenu(btn, menu) {
   });
 }
 // Editor text size (the Text menu stays open while stepping, so you see the change)
-for (const [btn, menu] of [['#exportBtn', '#exportMenu'], ['#schemeBtn', '#schemeMenu'], ['#themeMenuBtn', '#themeMenu'], ['#notationBtn', '#notationMenu']]) registerMenu(btn, menu);
+for (const [btn, menu] of [['#exportBtn', '#exportMenu'], ['#schemeBtn', '#schemeMenu'], ['#themeMenuBtn', '#themeMenu'], ['#notationBtn', '#notationMenu'], ['#dataLangBtn', '#dataLangMenu']]) registerMenu(btn, menu);
 const FONT_MIN = 10, FONT_MAX = 24;
 const lineHeight = () => Math.round(state.fontSize * 1.54); // 13px → 20px, as in the design
 function applyFontSize() {

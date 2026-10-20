@@ -1,7 +1,7 @@
 'use strict';
 
 // ─── Sample data: what tables and columns are about ──────────────────────────
-// For every language: the names a table of each kind may have, the words a column name
+// For every language: its name, the names a table of each kind may have, the words a column name
 // is made of, and how plurals are made. This is all that is needed to recognise tables
 // and to tell the language of a diagram; the records themselves are in one file per
 // language (en.js, sv.js…), which adds itself to SAMPLE_LANGS. See sample.js.
@@ -10,8 +10,8 @@
 const SAMPLE_LANGS = {};
 const SAMPLE_KINDS = {
   "languages": {
-    "en": {"letters":"","plurals":[["ies","y"],["es",""],["s",""]],"irregular":{"people":"person","children":"child","men":"man","women":"woman","mice":"mouse"},"flags":["is","has","can"]},
-    "sv": {"letters":"åäö","plurals":[["arna",""],["erna",""],["orna","a"],["ar",""],["er",""],["or","a"],["na",""],["en",""],["et",""],["n",""]],"irregular":{"bocker":"bok","personer":"person"},"flags":["ar","har"]}
+    "en": {"name":"English","letters":"","plurals":[["ies","y"],["es",""],["s",""]],"irregular":{"people":"person","children":"child","men":"man","women":"woman","mice":"mouse"},"flags":["is","has","can"]},
+    "sv": {"name":"Svenska","letters":"åäö","plurals":[["arna",""],["erna",""],["orna","a"],["ar",""],["er",""],["or","a"],["na",""],["en",""],["et",""],["n",""]],"irregular":{"bocker":"bok","personer":"person"},"flags":["ar","har"]}
   },
   "people": [
     {"id":"student","age":[16,30],"names":{"en":["student","pupil","learner"],"sv":["elev","student","deltagare"]}},

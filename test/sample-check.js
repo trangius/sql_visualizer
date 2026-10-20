@@ -1,7 +1,7 @@
 'use strict';
 
 // Checks the sample data of every example (js/examples.js) and of the schemas below, in
-// English and Swedish: no key repeats, every foreign key value exists where it points,
+// every language: no key repeats, every foreign key value exists where it points,
 // and values fit their columns.
 // Run: node test/sample-check.js
 
@@ -162,19 +162,20 @@ Gizmo
 `,
 };
 
-const ctx = { console, document: { querySelector: () => null }, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, drawDiagram() {} };
+const ctx = { console, document: { querySelector: () => null }, localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, onSampleData() {}, state: { sampleLang: null } };
 vm.createContext(ctx);
 vm.runInContext(['model', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') + `
 K = prepareKinds(SAMPLE_KINDS);
 let failures = 0;
 const fail = (where, msg) => { failures++; console.log('FAIL', where + ':', msg); };
-for (const [name, src] of Object.entries({ ...EXAMPLES, ...MORE })) {
+for (const [name, src] of Object.entries({ ...EXAMPLES, ...MORE })) for (const chosen of [null, ...K.langs]) {
+  state.sampleLang = chosen; // guessed, and each language chosen in the Data view
   const r = parseText(src);
   resolve(r.tables);
   for (const n of [SAMPLE_ROWS, 20]) {
     const data = sampleData(r.tables, n);
     for (const t of r.tables) {
-      const rows = data.get(t), where = name + ' ' + t.name;
+      const rows = data.get(t), where = name + ' (' + sampleLang(r.tables) + ') ' + t.name;
       if (!rows.length && t.cols.length) fail(where, 'no rows');
       for (const set of uniqueSets(t)) {
         const keys = rows.map(row => tupleKey(row, set)).filter(k => k != null);

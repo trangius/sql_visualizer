@@ -219,10 +219,10 @@ body.panel-collapsed #left, body.panel-collapsed #split { display: none; }
 .menu .ext { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .menu-sep { height: 1px; background: var(--line); margin: 4px; }
 .menu-left { right: auto; left: 0; width: 220px; }
-#themeList, #notationList { display: flex; flex-direction: column; gap: 1px; }
-#themeList button, #notationList button { justify-content: flex-start; gap: 8px; width: 100%; }
-#themeList .check, #notationList .check { width: 12px; color: var(--accent); font-weight: 600; }
-#themeList .theme-name, #notationList .item-name { flex: 1; }
+#themeList, #notationList, #dataLangList { display: flex; flex-direction: column; gap: 1px; }
+#themeList button, #notationList button, #dataLangList button { justify-content: flex-start; gap: 8px; width: 100%; }
+#themeList .check, #notationList .check, #dataLangList .check { width: 12px; color: var(--accent); font-weight: 600; }
+#themeList .theme-name, #notationList .item-name, #dataLangList .item-name { flex: 1; }
 .swatches { display: flex; gap: 3px; }
 .swatches i { width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, .25); }
 .size-row { display: flex; align-items: center; gap: 4px; padding: 2px 5px 4px 9px; }
@@ -429,6 +429,9 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 .card-tl { top: 12px; left: 12px; }
 .card-br { right: 12px; bottom: 12px; }
+.card-tr { top: 12px; right: 12px; }
+.card-text { padding: 0 2px 0 8px; color: var(--muted); white-space: nowrap; }
+@media (max-width: 760px) { .card-text { display: none; } } /* room for the top-left card */
 /* Presentation mode: only the canvas and its zoom controls */
 body.presenting .appbar, body.presenting .tabbar, body.presenting #left, body.presenting #split,
 body.presenting .card-tl, body.presenting #storageNotice, body.presenting #selectHint { display: none; }

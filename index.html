@@ -255,6 +255,20 @@
       </button>
     </div>
 
+    <div id="dataLangCard" class="card card-tr" hidden>
+      <span class="card-text">Made-up data in</span>
+      <div class="menu-wrap">
+        <button id="dataLangBtn" class="tool" aria-haspopup="menu" aria-expanded="false" title="Language of the made-up data: guessed from the names in the diagram, or chosen here">
+          <span id="dataLangLbl"></span>
+          <svg width="12" height="16" class="ico chev" aria-hidden="true"><path d="M2.5 6.5 6 10l3.5-3.5"/></svg>
+        </button>
+        <div id="dataLangMenu" class="menu" role="menu" hidden>
+          <div class="menu-label">Language of the data</div>
+          <div id="dataLangList"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="notationNote" class="note" role="dialog" aria-labelledby="noteTitle" hidden>
       <div class="note-title" id="noteTitle">This is an ER-style notation</div>
       <p>ER diagrams model any kind of system, before anyone has decided how it will be stored. That is why ER has 1‑1, 1‑N and N‑N relationships.</p>
