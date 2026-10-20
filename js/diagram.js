@@ -123,14 +123,15 @@ const cellText = v => v == null ? 'NULL' : v.length > CELL_MAX ? v.slice(0, CELL
 // so neighbours (the rows of one table, and the next table's rows) are far apart on the wheel.
 const hueCache = new WeakMap();
 function rowHues(tables) {
-  if (hueCache.has(tables)) return hueCache.get(tables);
-  const data = sampleData(tables), hues = new Map();
+  const data = sampleData(tables);
+  if (hueCache.has(data)) return hueCache.get(data);
+  const hues = new Map();
   const targeted = new Set(tables.flatMap(t => t.cols.map(c => c.target).filter(Boolean)));
   let i = 0;
   for (const t of tables) {
     if (targeted.has(t)) data.get(t).forEach((_, k) => hues.set(`${t.name}#${k}`, Math.round((20 + i++ * 137.508) % 360)));
   }
-  hueCache.set(tables, hues);
+  hueCache.set(data, hues);
   return hues;
 }
 

@@ -45,6 +45,12 @@ const KEY_LINE = /^\s+(pk|unique)\s*\(([^)]*)\)?\s*$/i;
 // The name an index gets in the SQL when none was given
 const indexName = (table, cols) => `idx_${table}_${cols.join('_')}`;
 
+// "# e.g. Volvo, Saab, Audi" after a column: the values its sample data takes
+function sampleHint(line) {
+  const m = line.match(/#\s*(?:e\.\s?g\.?|ex\.|t\.\s?ex\.?|example|exempel)[:\s]+(.+)$/i);
+  return m ? m[1].split(',').map(s => s.trim()).filter(Boolean) : null;
+}
+
 function parseText(src) {
   const tables = [], problems = [];
   let cur = null;
@@ -116,7 +122,7 @@ function parseText(src) {
       problems.push(problem(line, `Column ${name} is defined twice in ${cur.name}`));
       return;
     }
-    const col = { name, type: null, pk: false, nullable: false, unique: false, ref, refCol, line };
+    const col = { name, type: null, pk: false, nullable: false, unique: false, ref, refCol, line, hint: sampleHint(raw) };
     const typeParts = [];
     for (const t of toks) {
       if (/^\(?index\)?$/i.test(t)) {

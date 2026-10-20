@@ -625,10 +625,10 @@ $('#sqlBtn').onclick = () => {
   download(new Blob([currentSql()], { type: 'text/sql' }), name);
   toast(`Saved ${name}`);
 };
-$('#sqlDataBtn').onclick = () => {
+$('#sqlDataBtn').onclick = async () => {
   closeMenus();
-  const name = exportName('sql');
-  download(new Blob([currentSql() + '\n' + sampleInserts(model.tables)], { type: 'text/sql' }), name);
+  const name = exportName('sql'), sql = currentSql(), inserts = await sampleInserts(model.tables);
+  download(new Blob([sql + '\n' + inserts], { type: 'text/sql' }), name);
   toast(`Saved ${name} with sample data`);
 };
 $('#copySqlBtn').onclick = copySql;
