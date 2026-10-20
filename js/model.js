@@ -17,10 +17,13 @@ const INT_TYPES = new Set(['int', 'integer', 'bigint', 'smallint', 'mediumint', 
 const problem = (line, msg, level = 'error') => ({ line, msg, level });
 const snap = v => Math.round(v / 10) * 10; // the diagram's 10px grid
 
+// Applies f to a type outside its 'quoted' values, so enum('Small','Large') keeps its case
+const outsideQuotes = (t, f) => t.replace(/'(?:[^']|'')*'?|[^']+/g, m => m[0] === "'" ? m : f(m));
+
 // Canonical short form of a type: "VARCHAR(128)" → "vc", "varchar(50)" → "vc(50)", "INT(11)" → "int"
 function normType(t) {
   if (!t) return null;
-  let s = t.toLowerCase().replace(/\s+/g, ' ').replace(/\s*\(\s*/g, '(').replace(/\s*,\s*/g, ',').replace(/\s*\)/g, ')').trim();
+  let s = outsideQuotes(t, s => s.toLowerCase()).replace(/\s+/g, ' ').replace(/\s*\(\s*/g, '(').replace(/\s*,\s*/g, ',').replace(/\s*\)/g, ')').trim();
   const m = s.match(/^(?:vc|varchar)(?:\((\d+)\))?(?=$|\s)(.*)$/);
   if (m) {
     const n = m[1] ? +m[1] : DEFAULT_VC;
@@ -31,8 +34,9 @@ function normType(t) {
 
 function sqlType(t) {
   const m = t.match(/^vc(?:\((\d+)\))?(?=$|\s)(.*)$/);
-  if (m) return `VARCHAR(${m[1] || DEFAULT_VC})` + m[2].toUpperCase();
-  return t.toUpperCase();
+  const up = s => outsideQuotes(s, s => s.toUpperCase());
+  if (m) return `VARCHAR(${m[1] || DEFAULT_VC})` + up(m[2]);
+  return up(t);
 }
 
 // ─── Text syntax → model ─────────────────────────────────────────────────────
@@ -170,6 +174,20 @@ linestring polygon`.split(/\s+/));
 const TYPE_MODIFIERS = new Set(['unsigned', 'signed', 'zerofill', 'precision']);
 const FLAG_WORDS = ['pk', 'null', 'unique'];
 
+// What a foreign key compares: integers by size and sign, decimals by precision and scale,
+// strings without their length. null for TEXT, BLOB and JSON, which can't be keys at all.
+const INT_SIZE = { tinyint: 'tinyint', bool: 'tinyint', boolean: 'tinyint', smallint: 'smallint',
+  mediumint: 'mediumint', int: 'int', integer: 'int', bigint: 'bigint', serial: 'bigint' };
+function keyType(t) {
+  const [, base, args, rest] = t.match(/^(\w+)(\([^)]*\))?(.*)$/);
+  if (base in INT_SIZE) return INT_SIZE[base] + (base === 'serial' || /\bunsigned\b/.test(rest) ? ' unsigned' : '');
+  if (/^(decimal|dec|numeric|fixed)$/.test(base)) return 'decimal' + (args ?? '(10)').replace(/^\((\d+)\)$/, '($1,0)') + rest;
+  if (/^(vc|varchar|char)$/.test(base)) return 'string';
+  if (/^(binary|varbinary)$/.test(base)) return 'binary';
+  if (/(text|blob)$|^json$/.test(base)) return null;
+  return base + rest;
+}
+
 // Levenshtein distance, for "did you mean …?"
 function editDistance(a, b) {
   let row = [...Array(b.length + 1).keys()];
@@ -281,7 +299,7 @@ function resolve(tables, implicit = false) {
       if (c.refError) problems.push(problem(c.line, c.refError));
       else if (!(tt.pkCols.length === 1 && tt.pkCols[0] === c.targetCol) && !c.targetCol.unique) {
         problems.push(problem(c.line, `${tt.name}.${c.targetCol.name} is neither the primary key nor unique. ` +
-          'MariaDB needs an index on it, and normally it should be unique.', 'warn'));
+          'The SQL adds an index on it, but normally it should be unique.', 'warn'));
       }
     }
   }
@@ -296,6 +314,20 @@ function resolve(tables, implicit = false) {
       c.indexed = false;
       c.autoInc = c.isPk && t.pkCols.length === 1 && isIdName(c.name) && INT_TYPES.has(c.effType.split(/[ (]/)[0]);
       if (c.isPk && c.nullable) problems.push(problem(c.line, `${c.name} is a primary key and can't be null`));
+    }
+  }
+  for (const t of tables) {
+    for (const c of t.cols) {
+      if (!c.target || c.implicit) continue;
+      const tc = c.targetCol, a = keyType(c.effType), b = keyType(tc.effType);
+      const where = `${c.target.name}.${tc.name}`;
+      if (a === null || b === null) {
+        problems.push(problem(c.line, `${b === null ? where : c.name} is ${b === null ? tc.effType : c.effType}, ` +
+          'which can\'t be part of a foreign key. Use vc instead.'));
+      } else if (a !== b) {
+        problems.push(problem(c.line, `${c.name} is ${c.effType} but ${where} is ${tc.effType}. ` +
+          'A foreign key needs the same type on both sides.'));
+      }
     }
   }
   // Indexes: a one-column index is shown as a flag on its column, a longer one below the columns

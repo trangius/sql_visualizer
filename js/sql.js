@@ -47,6 +47,20 @@ function topoOrder(tables) {
   return { order: out, cyclic };
 }
 
+// MariaDB names are at most 64 characters: a longer one is cut, with a hash of the whole to keep it unique
+function name64(n) {
+  if (n.length <= 64) return n;
+  let h = 0;
+  for (const ch of n) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return n.slice(0, 57) + '_' + h.toString(36).padStart(6, '0').slice(-6);
+}
+
+// A foreign key needs an index on the column it points to. True when a key or index already starts with it.
+function hasIndex(t, c) {
+  return c.unique || t.pkCols[0] === c || t.multiUniques.some(u => u.cols[0] === c) ||
+    (t.indexes ?? []).some(ix => ix.cols[0]?.toLowerCase() === c.name.toLowerCase());
+}
+
 function genSQL(tables) {
   const { order, cyclic } = topoOrder(tables.filter(t => t.cols.length));
   const out = ['-- MariaDB / MySQL', "SET sql_mode = 'STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION';", ''];
@@ -54,7 +68,7 @@ function genSQL(tables) {
   if (cyclic) out.push('SET FOREIGN_KEY_CHECKS = 0;');
   for (const t of [...order].reverse()) out.push(`DROP TABLE IF EXISTS ${q(t.name)};`);
   out.push('');
-  const created = new Set(), deferred = [];
+  const created = new Set(), deferred = [], targetIndexes = new Map();
   for (const t of order) {
     created.add(t);
     const w = Math.max(...t.cols.map(c => q(c.name).length));
@@ -63,6 +77,13 @@ function genSQL(tables) {
       `${c.autoInc ? ' AUTO_INCREMENT' : ''}${c.unique ? ' UNIQUE' : ''}`);
     if (t.pkCols.length) defs.push(`  PRIMARY KEY (${t.pkCols.map(c => q(c.name)).join(', ')})`);
     for (const u of t.multiUniques ?? []) defs.push(`  UNIQUE (${u.cols.map(c => q(c.name)).join(', ')})`);
+    const pointedTo = new Set(tables.flatMap(o => o.cols.filter(c => c.target === t).map(c => c.targetCol)));
+    for (const c of t.cols) {
+      if (!pointedTo.has(c) || hasIndex(t, c)) continue;
+      const name = name64(indexName(t.name, [c.name]));
+      targetIndexes.set(t, [...targetIndexes.get(t) ?? [], name.toLowerCase()]);
+      defs.push(`  INDEX ${q(name)} (${q(c.name)})`);
+    }
     for (const c of t.cols) {
       if (!c.target) continue;
       const fk = `FOREIGN KEY (${q(c.name)}) REFERENCES ${q(c.target.name)}(${q(c.targetCol.name)})`;
@@ -72,8 +93,18 @@ function genSQL(tables) {
     out.push(`CREATE TABLE ${q(t.name)} (\n${defs.join(',\n')}\n);`, '');
   }
   if (deferred.length) out.push(...deferred, '');
-  const indexes = order.flatMap(t => (t.indexes ?? []).filter(ix => ix.cols.every(n => t.cols.some(c => c.name === n)))
-    .map(ix => `CREATE INDEX ${q(ix.name ?? indexName(t.name, ix.cols))} ON ${q(t.name)} (${ix.cols.map(q).join(', ')});`));
+  const indexes = order.flatMap(t => {
+    // names MariaDB gives the indexes it makes itself: a UNIQUE or FOREIGN KEY one is named after its first column
+    const taken = new Set(['primary', ...t.cols.filter(c => c.unique || c.target).map(c => c.name.toLowerCase()),
+      ...(t.multiUniques ?? []).map(u => u.cols[0].name.toLowerCase()), ...targetIndexes.get(t) ?? []]);
+    return (t.indexes ?? []).filter(ix => ix.cols.every(n => t.cols.some(c => c.name === n))).map(ix => {
+      const base = name64(ix.name ?? indexName(t.name, ix.cols));
+      let name = base;
+      for (let i = 2; taken.has(name.toLowerCase()); i++) name = base.slice(0, 63 - String(i).length) + '_' + i;
+      taken.add(name.toLowerCase());
+      return `CREATE INDEX ${q(name)} ON ${q(t.name)} (${ix.cols.map(q).join(', ')});`;
+    });
+  });
   if (indexes.length) out.push(...indexes, '');
   if (cyclic) out.push('SET FOREIGN_KEY_CHECKS = 1;', '');
   return out.join('\n');
