@@ -404,6 +404,208 @@ Libro
   Precio decimal(8,2)
   CursoId -> Curso
 `,
+  'school (nl)': `# Schooldatabase
+Leerling
+  Id
+  Voornaam
+  Achternaam
+  Geboortedatum date
+  Bsn char(9) unique
+  Emailadres vc(100) unique
+  Telefoonnummer vc(20)
+  Straat
+  Postcode vc(7)
+  Woonplaats
+  Provincie
+
+Docent
+  Id
+  Voornaam
+  Achternaam
+  Salaris decimal(8,2)
+  Emailadres vc(100) unique
+
+Vak
+  Id
+  Naam vc(100)
+
+Cursus
+  Id
+  Naam vc(100)
+  Cursuscode vc(10) unique
+  Studiepunten decimal(4,1)
+  Lokaal vc(30)
+  VakId -> Vak
+  DocentId null -> Docent [delete set null]
+
+# Welke leerlingen welke cursussen volgen
+Inschrijving
+  LeerlingId -> Leerling [delete cascade]
+  CursusId -> Cursus [delete cascade]
+  Inschrijfdatum date
+  Cijfer decimal(3,1) null
+  pk (LeerlingId, CursusId)
+
+Lesboek
+  Id
+  Titel
+  Auteur
+  Verschijningsjaar year
+  Prijs decimal(8,2)
+  CursusId -> Cursus
+`,
+  'scuola (it)': `# Database della scuola
+Studente
+  Id
+  Nome
+  Cognome
+  DataNascita date
+  CodiceFiscale vc(16) unique
+  Email vc(100) unique
+  Telefono vc(12)
+  Indirizzo
+  CAP vc(5)
+  Citta
+
+Docente
+  Id
+  Nome
+  Cognome
+  Stipendio decimal(8,2)
+  Email vc(100) unique
+
+Corso
+  Id
+  Nome vc(100)
+  Codice vc(10) unique
+  Crediti tinyint
+  DocenteId null -> Docente [delete set null]
+  AulaId null -> Aula
+
+Aula
+  Id
+  Nome vc(50)
+  Capienza int
+  Piano tinyint
+
+# Quali studenti seguono quali corsi
+Iscrizione
+  StudenteId -> Studente [delete cascade]
+  CorsoId -> Corso [delete cascade]
+  DataIscrizione date
+  Voto vc(9) null
+  pk (StudenteId, CorsoId)
+
+Libro
+  Id
+  Titolo
+  Autore
+  AnnoPubblicazione year
+  Prezzo decimal(8,2)
+  CorsoId -> Corso
+`,
+  'escola (pt)': `# Banco de dados da escola
+Aluno
+  Id
+  Nome
+  Sobrenome
+  DataNascimento date
+  CPF vc(14) unique
+  Email vc(100) unique
+  Telefone vc(16)
+  Endereço
+  CEP vc(9)
+  Cidade
+
+Professor
+  Id
+  Nome
+  Sobrenome
+  Salário decimal(8,2)
+  Email vc(100) unique
+
+Curso
+  Id
+  Nome vc(100)
+  Código vc(10) unique
+  Créditos int
+  Preço decimal(8,2)
+  ProfessorId null -> Professor [delete set null]
+  SalaId null -> Sala
+
+Sala
+  Id
+  Nome vc(50)
+  Capacidade int
+  Andar tinyint
+
+# Quais alunos estão em quais cursos
+Matrícula
+  AlunoId -> Aluno [delete cascade]
+  CursoId -> Curso [delete cascade]
+  DataMatrícula date
+  Nota decimal(4,2) null
+  Situação vc(20)
+  pk (AlunoId, CursoId)
+
+Avaliação
+  Id
+  AlunoId -> Aluno
+  CursoId -> Curso
+  Comentário text
+  Estrelas tinyint
+`,
+  'szkola (pl)': `# Baza danych szkoły
+Uczeń
+  Id
+  Imię
+  Nazwisko
+  DataUrodzenia date
+  Pesel vc(11) unique
+  Email vc(100) unique
+  Telefon vc(20)
+  Ulica
+  KodPocztowy vc(6)
+  Miasto
+  Województwo
+
+Nauczyciel
+  Id
+  Imię
+  Nazwisko
+  Pensja decimal(8,2)
+  Email vc(100) unique
+
+Kurs
+  Id
+  Nazwa vc(100)
+  KodKursu vc(10) unique
+  PunktyEcts decimal(4,1)
+  NauczycielId null -> Nauczyciel [delete set null]
+  SalaId null -> Sala
+
+Sala
+  Id
+  Nazwa vc(50)
+  LiczbaMiejsc int
+  Piętro tinyint
+
+# Którzy uczniowie chodzą na które kursy
+Zapis
+  UczeńId -> Uczeń [delete cascade]
+  KursId -> Kurs [delete cascade]
+  DataZapisu date
+  Ocena tinyint null
+  pk (UczeńId, KursId)
+
+Podręcznik
+  Id
+  Tytuł
+  Autor
+  RokWydania year
+  Cena decimal(8,2)
+  KursId -> Kurs
+`,
   'keys': `Room
   Id
   Name vc(5)

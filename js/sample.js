@@ -42,8 +42,8 @@ const pad2 = n => String(n).padStart(2, '0');
 const isoDate = ms => new Date(ms).toISOString().slice(0, 10);
 
 const low = s => s.toLowerCase();
-// å ä → a, ø → o, æ → ae, ß → ss, and every other accent off: é → e, ç → c, ñ → n
-const fold = s => low(s).replace(/ø/g, 'o').replace(/æ/g, 'ae').replace(/ß/g, 'ss').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+// å ä → a, ø ł → o l, æ → ae, ß → ss, and every other accent off: é → e, ç → c, ñ → n
+const fold = s => low(s).replace(/ø/g, 'o').replace(/ł/g, 'l').replace(/æ/g, 'ae').replace(/ß/g, 'ss').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const ascii = s => fold(s).replace(/[^a-z0-9]/g, '');
 // "CustomerOrder", "order_line" → ["customer", "order"], ["order", "line"]
 const words = s => s.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2').split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(ascii);
@@ -348,7 +348,12 @@ function rawValue(t, c, i, ctx, ti, key) {
     case 'url': return `https://example.com/${ascii(t.name)}/${i + 1}`;
     case 'end': case 'date': return new Date(ctx.date).getUTCFullYear(); // an int column named like a date
     case 'qty': return between(1, 20, key);
-    case 'grade': return ti.int || ti.dec ? between(1, 5, key) : pick(D.grades, key);
+    case 'grade': {
+      if (!ti.int && !ti.dec) return pick(D.grades, key);
+      // a number column takes the language's grades that are numbers (8,5 is 8.5), else 1–5
+      const nums = D.grades.map(g => g.replace(',', '.')).filter(g => (ti.int ? /^-?\d+$/ : /^-?\d+(\.\d+)?$/).test(g)).map(Number);
+      return nums.length ? pick(nums, key) : between(1, 5, key);
+    }
     case 'height': return between(150, 195, key);
     case 'room': return ti.int ? between(101, 320, key) : pick('ABC', key + 'r') + between(101, 320, key);
     case 'text': return pick(D.texts, key);
