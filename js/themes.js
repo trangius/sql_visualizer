@@ -21,7 +21,7 @@ const THEMES = {
       bg: '#f5efe2', panel: '#faf6ee', soft: '#f0e8d6', dot: '#dccfb4', line: '#e6dcc6', line2: '#dccfb4',
       fg: '#1c1812', muted: '#5e5440', faint: '#8a7e60', accent: '#3a4658', accentSoft: '#e5e0d2',
       sel: 'rgba(58, 70, 88, .18)', err: '#7a2e22', warn: '#7e5414',
-      boxBg: '#fffcf5', boxBorder: '#d3cab2', rowHover: '#f5efe2', keyL: .52, keyC: .11,
+      boxBg: '#fffcf5', boxBorder: '#d3cab2', rowHover: '#f5efe2', keyL: .52, keyC: .16,
       tok: { tbl: '#a25a00', type: '#2b5c94', flag: '#b0392a', arrow: '#4a7d12', ref: '#4a7d12', com: '#8a7e60' },
     },
     dark: {

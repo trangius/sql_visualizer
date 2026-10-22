@@ -32,7 +32,7 @@
   --box-head-fg: #1c1812;
   --box-border: #d3cab2;
   --dv-s: 70%; --dv-l: 84%; /* data view row colours: saturation and lightness (the hue varies) */
-  --key-l: .52; --key-c: .11; /* key colours (PK/FK badges, key dots): OKLCH lightness and chroma */
+  --key-l: .52; --key-c: .16; /* key colours (PK/FK badges, key dots): OKLCH lightness and chroma */
   --row-hover: #f5efe2;
   --toast: #1c1812;
   --toast-fg: #faf6ee;

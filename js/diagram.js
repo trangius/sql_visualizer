@@ -50,13 +50,18 @@ function markShown(tables) {
 }
 
 // Every key gets a colour of its own, and an FK the colour of the key it points to.
-// Hues step by the golden angle, so any number of them stay far apart on the wheel;
+// Hues step by the golden angle, so any number of them stay far apart on the wheel,
+// skipping yellow, which at a readable lightness is a muddy olive;
 // lightness and chroma come from the theme (--key-l, --key-c) and are even in OKLCH.
 // Handed out in table order: t.hue (its primary key), u.hue (its unique (…) keys),
 // c.keyHue (the hue an FK's badge gets).
 function keyHues(tables) {
   let i = 0;
-  const next = () => Math.round((40 + i++ * 137.508) % 360);
+  const next = () => {
+    let h;
+    do h = Math.round((40 + i++ * 137.508) % 360); while (h > 70 && h < 115);
+    return h;
+  };
   const colHue = new Map(); // a column an FK points to that isn't its table's primary key
   for (const t of tables) {
     t.hue = t.pkCols.length ? next() : null;
