@@ -42,7 +42,7 @@ const pad2 = n => String(n).padStart(2, '0');
 const isoDate = ms => new Date(ms).toISOString().slice(0, 10);
 
 const low = s => s.toLowerCase();
-const fold = s => low(s).replace(/[åä]/g, 'a').replace(/ö/g, 'o').replace(/[éè]/g, 'e').replace(/ü/g, 'u');
+const fold = s => low(s).replace(/[åä]/g, 'a').replace(/[öø]/g, 'o').replace(/æ/g, 'ae').replace(/[éè]/g, 'e').replace(/ü/g, 'u');
 const ascii = s => fold(s).replace(/[^a-z0-9]/g, '');
 // "CustomerOrder", "order_line" → ["customer", "order"], ["order", "line"]
 const words = s => s.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2').split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(ascii);
@@ -85,12 +85,14 @@ function prepareKinds(sk) {
     ...sk.events.map(e => ({ ...e, fields: [] })),
     ...sk.kinds,
   ];
-  const index = new Map(), langOf = new Map();
+  // index: the first language's kind wins; ownIndex: each language's own (sanger is a song in Swedish, a singer in Danish)
+  const index = new Map(), langOf = new Map(), ownIndex = Object.fromEntries(langs.map(l => [l, new Map()]));
   for (const k of kinds) {
     for (const l of langs) {
       for (const n of k.names[l] ?? []) {
         const a = ascii(n);
         if (!index.has(a)) index.set(a, k);
+        if (!ownIndex[l].has(a)) ownIndex[l].set(a, k);
         if (!langOf.has(a)) langOf.set(a, new Set());
         langOf.get(a).add(l);
       }
@@ -99,7 +101,7 @@ function prepareKinds(sk) {
   const all = by => Object.values(by).filter(Boolean).join('|');
   const columns = (group, end) => Object.entries(sk.columns[group]).map(([f, by]) => [f, new RegExp(end ? `(${all(by)})$` : all(by))]);
   return {
-    langs, kinds, index, langOf,
+    langs, kinds, index, ownIndex, langOf,
     plurals: langs.flatMap(l => sk.languages[l].plurals),
     irregular: Object.assign({}, ...langs.map(l => sk.languages[l].irregular)),
     flags: new Set(langs.flatMap(l => sk.languages[l].flags)),
@@ -118,13 +120,15 @@ function stems(w) {
 }
 
 // What a name is about: its last word decides (CustomerOrder is an order), and a compound
-// by how it ends (hundägare is an ägare, kundorder an order)
+// by how it ends (hundägare is an ägare, kundorder an order). A word of the diagram's language
+// goes before the same word in another one.
 const kindCache = new Map();
-function kindOf(name) {
+function kindOf(name, lang) {
   if (!name) return null;
-  if (kindCache.has(name)) return kindCache.get(name);
-  const last = words(name).pop() ?? '';
-  let found = stems(last).map(s => K.index.get(s)).find(Boolean) ?? null;
+  const ck = lang + ':' + name;
+  if (kindCache.has(ck)) return kindCache.get(ck);
+  const last = words(name).pop() ?? '', own = K.ownIndex[lang];
+  let found = (own && stems(last).map(s => own.get(s)).find(Boolean)) ?? stems(last).map(s => K.index.get(s)).find(Boolean) ?? null;
   if (!found) {
     let best = '';
     for (const s of stems(last)) {
@@ -132,7 +136,7 @@ function kindOf(name) {
     }
     if (best) found = K.index.get(best);
   }
-  kindCache.set(name, found);
+  kindCache.set(ck, found);
   return found;
 }
 
@@ -175,7 +179,7 @@ const isNumeric = c => { const ti = typeInfo(c); return ti.int || ti.bool || ti.
 
 // How a column gets its values, worked out once per column:
 // { from: 'hint' | 'record' | 'person' | 'generic', kind, field }
-function columnPlan(t, c, tableKind) {
+function columnPlan(t, c, tableKind, lang) {
   if (c.hint?.length) return { from: 'hint' };
   const name = ascii(c.name), ws = words(c.name);
   for (const [field, re] of K.person) if (re.test(name)) return { from: 'person', field };
@@ -188,7 +192,7 @@ function columnPlan(t, c, tableKind) {
     const m = name.match(re);
     if (!m || (m[0].length < 4 && !starts.has(m.index))) continue;
     const prefix = name.slice(0, m.index);
-    const kind = (prefix.length >= 3 && kindOf(c.name.slice(0, c.name.length - m[0].length))) || tableKind;
+    const kind = (prefix.length >= 3 && kindOf(c.name.slice(0, c.name.length - m[0].length), lang)) || tableKind;
     const has = f => kind?.fields.includes(f);
     const f = has(field) ? field : field === 'name' && has('title') ? 'title' : field === 'title' && has('name') ? 'name' : null;
     if (f) return { from: 'record', kind, field: f };
@@ -202,7 +206,7 @@ function columnPlan(t, c, tableKind) {
   }
   for (const [field, re] of K.generic) if (re.test(name)) return { from: 'generic', field };
   // a column named after a role ("Kund", "Owner") holds that person's name
-  const role = kindOf(c.name);
+  const role = kindOf(c.name, lang);
   if (role?.person) return { from: 'person', field: 'name', kind: role };
   return { from: 'generic', field: null };
 }
@@ -221,7 +225,7 @@ function makePerson(lang, role, seed, i) {
   const D = langData(lang), P = D.people, key = seed + i, female = rand(key + 'g') < .5;
   const first = nth(female ? P.female : P.male, seed + 'f', i), last = nth(P.last, seed + 'l', i);
   const [a0, a1] = role?.age ?? [18, 80], age = between(a0, a1, key + 'a');
-  const birth = TODAY - age * 365.25 * DAY - between(1, 360, key + 'b') * DAY;
+  const birth = TODAY - age * 365.25 * DAY - between(1, 360, key + 'b') * DAY, ymd = isoDate(birth).replace(/-/g, '');
   const city = nth(P.cities, seed + 'c', i), street = pick(P.streets, key + 's'), no = between(1, 120, key + 'n');
   const own = role && D.roles[role.id], job = kindById('job');
   const work = own ? { title: nth(own.jobs, seed + 'j', i), salary: Math.round(between(...own.pay, key + 'w') / 100) * 100 }
@@ -232,7 +236,8 @@ function makePerson(lang, role, seed, i) {
     email: `${ascii(first)}.${ascii(last)}@${pick(P.domains, key + 'd')}`,
     user: ascii(first) + between(1, 99, key + 'u'),
     phone: format(D.formats.phone, {}, key + 'p'),
-    ssn: format(D.formats.ssn, { birth: isoDate(birth).replace(/-/g, '') }, key + 'x'),
+    // {birth} YYYYMMDD, {ddmmyy} DDMMYY, {century} the Finnish century sign (- for the 1900s, A from 2000)
+    ssn: format(D.formats.ssn, { birth: ymd, ddmmyy: ymd.slice(6) + ymd.slice(4, 6) + ymd.slice(2, 4), century: ymd < '2000' ? '-' : 'A' }, key + 'x'),
     address: format(D.formats.address, { street, no }, key),
     postcode: format(D.formats.postcode, { code: city[1] }, key + 'q'),
     city: city[0], region: city[2], country: D.country,
@@ -340,7 +345,7 @@ function rawValue(t, c, i, ctx, ti, key) {
 
 // The rows of one table: every column that isn't a foreign key, row by row
 function tableRows(t, n, lang, plans) {
-  const kind = kindOf(t.name);
+  const kind = kindOf(t.name, lang);
   const rows = [];
   for (let i = 0; i < n; i++) {
     const seed = t.name + '#';
@@ -463,8 +468,8 @@ function sampleData(tables, n = SAMPLE_ROWS) {
   if (cached) return cached;
   const data = new Map(), plans = new Map();
   for (const t of tables) {
-    const kind = kindOf(t.name);
-    for (const c of t.cols) plans.set(c, columnPlan(t, c, kind));
+    const kind = kindOf(t.name, lang);
+    for (const c of t.cols) plans.set(c, columnPlan(t, c, kind, lang));
   }
   for (const t of tables) {
     const rows = tableRows(t, isJunction(t) ? 2 * n : n, lang, plans);

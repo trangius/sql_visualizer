@@ -8,7 +8,10 @@ module.exports = function load(extra = {}) {
   const ctx = { console, document: { querySelector: () => null }, localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     onSampleData() {}, state: { sampleLang: null }, ...extra };
   vm.createContext(ctx);
-  vm.runInContext(['model', 'dialects', 'sql', 'examples', 'sample/kinds', 'sample/en', 'sample/sv', 'sample'].map(js).join('\n') +
+  vm.runInContext(['model', 'dialects', 'sql', 'examples', 'sample/kinds'].map(js).join('\n'), ctx);
+  // every language kinds.js names has its file
+  const langs = Object.keys(vm.runInContext('SAMPLE_KINDS', ctx).languages);
+  vm.runInContext([...langs.map(l => 'sample/' + l), 'sample'].map(js).join('\n') +
     '\nloadScript = async () => {}; // the sample files are already loaded', ctx);
   return ctx;
 };

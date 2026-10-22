@@ -132,6 +132,131 @@ Kommentar
   Text
   Skapad datetime
 `,
+  'skole (no)': `# Skole
+Elev
+  Id
+  Fornavn
+  Etternavn
+  Fødselsdato date
+  Epost vc(100) unique
+  Telefon vc(20)
+  Adresse
+  Postnummer vc(4)
+  Poststed
+Lærer
+  Id
+  Fornavn
+  Etternavn
+  Epost vc(100) unique
+  Lønn int
+Fag
+  Id
+  Navn vc(100)
+Kurs
+  Id
+  Navn vc(100)
+  Emnekode vc(10) unique
+  Studiepoeng decimal(4,1)
+  FagId -> Fag
+  LærerId null -> Lærer
+Påmelding
+  ElevId -> Elev
+  KursId -> Kurs
+  Påmeldingsdato date
+  Karakter char(1) null
+  pk (ElevId, KursId)
+`,
+  'skole (da)': `# Skoledatabase
+Elev
+  Id
+  Fornavn
+  Efternavn
+  Fødselsdato date
+  CprNummer vc(11) unique
+  Email vc(100) unique
+  Telefon vc(11)
+  Adresse
+  Postnummer vc(4)
+  By
+
+Lærer
+  Id
+  Fornavn
+  Efternavn
+  Løn int
+  Email vc(100) unique
+
+Kursus
+  Id
+  Navn vc(100)
+  Kursuskode vc(10) unique
+  ECTS decimal(4,1)
+  LærerId null -> Lærer [delete set null]
+  LokaleId null -> Lokale
+
+Lokale
+  Id
+  Navn vc(50)
+  Pladser int
+  Etage tinyint
+
+# Hvilke elever går på hvilke kurser
+Tilmelding
+  ElevId -> Elev [delete cascade]
+  KursusId -> Kursus [delete cascade]
+  Tilmeldingsdato date
+  Karakter vc(2) null
+  pk (ElevId, KursusId)
+
+Lærebog
+  Id
+  Titel
+  Forfatter
+  Udgivelsesår year
+  Pris decimal(8,2)
+  KursusId -> Kursus
+`,
+  'koulu (fi)': `# Koulu
+Opettaja
+  Id
+  Etunimi
+  Sukunimi
+  Sahkoposti vc(100) unique
+  Puhelin vc(20)
+  Palkka decimal(8,2)
+
+Oppilas
+  Id
+  Etunimi
+  Sukunimi
+  Henkilotunnus vc(11) unique
+  Syntymaaika date
+  Katuosoite
+  Postinumero vc(5)
+  Postitoimipaikka
+
+Kurssi
+  Id
+  Nimi vc(100)
+  Kurssikoodi vc(10)
+  Opintopisteet int
+  OpettajaId null -> Opettaja
+
+Ilmoittautuminen
+  OppilasId -> Oppilas
+  KurssiId -> Kurssi
+  Ilmoittautumispaiva date
+  Arvosana int null
+  pk (OppilasId, KurssiId)
+
+Kirja
+  Id
+  Nimi vc(100)
+  Kirjailija
+  Julkaisuvuosi int
+  Hinta decimal(6,2)
+  KurssiId null -> Kurssi
+`,
   'keys': `Room
   Id
   Name vc(5)
@@ -166,6 +291,14 @@ vm.runInContext(`
 K = prepareKinds(SAMPLE_KINDS);
 let failures = 0;
 const fail = (where, msg) => { failures++; console.log('FAIL', where + ':', msg); };
+// a schema named "… (sv)" is written in that language, and the guess must say so
+for (const [name, src] of Object.entries(MORE)) {
+  const want = name.match(/\((\w+)\)$/)?.[1];
+  if (!want) continue;
+  const r = parseText(src);
+  resolve(r.tables);
+  if (schemaLang(r.tables) !== want) fail(name, 'guessed ' + schemaLang(r.tables));
+}
 for (const [name, src] of Object.entries({ ...EXAMPLES, ...MORE })) for (const chosen of [null, ...K.langs]) {
   state.sampleLang = chosen; // guessed, and each language chosen in the Data view
   const r = parseText(src);
