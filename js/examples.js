@@ -62,6 +62,7 @@ COrder
   StatusId -> OrderStatus
   CustomerId -> Customer
   Source vc(50) null  # e.g. Direkt, Google, Instagram, Nyhetsbrev
+  index (CustomerId, StatusId, CreatedDate)  # also serves CustomerId alone: an index is used from the left
 
 ProductToOrder
   Id
@@ -71,6 +72,7 @@ ProductToOrder
   Description text null
   Quantity int
   UnitPrice decimal(12,2)  # price per unit at purchase time
+  index (OrderId, Quantity, UnitPrice)  # covering: SUM(Quantity * UnitPrice) per order from the index alone
 
 ProductCategory
   Id
@@ -97,6 +99,7 @@ ProductPrice
   ProductId -> Product
   StartDate datetime  # price valid from this date
   Price int
+  index (ProductId, StartDate)  # which price applied at a given date?
 
 Return
   Id

@@ -65,7 +65,7 @@ function openTableEditor(name, at = null) {
         name: c.name, origName: c.name, type: c.type ?? '', pk: c.pk || (!!t.pkLine && c.isPk), nullable: c.nullable, unique: c.unique, auto: c.auto,
         ref: !c.ref ? null : c.target === t || (!c.target && lc(c.ref) === lc(t.name)) ? SELF : c.target?.name ?? c.ref,
         refCol: !c.ref ? null : !c.target ? c.refCol : pointsToPk(c) ? null : c.targetCol.name,
-        onDelete: c.onDelete, onUpdate: c.onUpdate, default: c.default, // kept as they are: the dialog doesn't edit them
+        onDelete: c.onDelete, onUpdate: c.onUpdate, default: c.default, indexed: c.indexed, // kept as they are: the dialog doesn't edit them
         comment: inlineComment(lines[c.line - 1]),
       }))
     : [{ ...blankCol(), name: 'Id' }, blankCol()];
@@ -387,6 +387,7 @@ function saveTable() {
     if (c.pk && !pkLine) parts.push('pk');
     if (c.nullable) parts.push('null');
     if (c.unique) parts.push('unique');
+    if (c.indexed) parts.push('index');
     if (c.auto && !isIdName(c.name)) parts.push('auto_increment');
     if (c.ref) {
       const self = toSelf(c);
@@ -416,11 +417,12 @@ function saveTable() {
     if (name !== dlg.orig && pos[dlg.orig]) { pos[name] = pos[dlg.orig]; delete pos[dlg.orig]; }
     const [s, e] = blockRange(lines, t.line - 1);
     const comments = lines.slice(s + 1, e + 1).filter(l => /^\s+#/.test(l)); // keep comment lines inside the table
-    // and the unique (…) lines, following renamed columns; columns deleted in the dialog leave them
-    const uniques = t.uniques.filter(u => u.cols.length > 1).map(u => ({ cols: u.cols.map(n => renamed.get(lc(n)) ?? n), comment: inlineComment(lines[u.line - 1]) }))
+    // and the unique (…) and index (…) lines, following renamed columns; columns deleted in the dialog leave them
+    const keyLines = (word, keys) => keys.filter(u => u.cols.length > 1)
+      .map(u => ({ cols: u.cols.map(n => renamed.get(lc(n)) ?? n), comment: inlineComment(lines[u.line - 1]) }))
       .filter(u => u.cols.every(n => seen.has(lc(n))))
-      .map(u => `  unique (${u.cols.join(', ')})` + (u.comment ? '  ' + u.comment : ''));
-    lines.splice(s, e - s + 1, block[0], ...comments, ...block.slice(1), ...uniques);
+      .map(u => `  ${word} (${u.cols.join(', ')})` + (u.comment ? '  ' + u.comment : ''));
+    lines.splice(s, e - s + 1, block[0], ...comments, ...block.slice(1), ...keyLines('unique', t.uniques), ...keyLines('index', t.multiIndexes));
     at = s + 1;
   } else {
     while (lines.length && !lines[lines.length - 1].trim()) lines.pop();

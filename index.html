@@ -187,6 +187,7 @@
           <code class="t-flag">auto_increment</code><div>The database numbers the rows itself. An integer <b>Id</b> gets this on its own; write it for another integer primary key. <b>a_i</b> for short.</div>
           <code class="t-flag">pk (A, B)</code><div>One primary key over several columns: only the combination must be unique, each column alone may repeat.</div>
           <code class="t-flag">unique (A, B)</code><div>The combination is unique. Here: one dog per place at each show.</div>
+          <code class="t-flag">index</code><div>An index on the column, so searches and JOINs on it are fast. <b>index (A, B)</b> for one over several columns.</div>
           <code class="t-arrow">-&gt; Table</code><div>Foreign key to that table's primary key. The column inherits its type.</div>
           <code class="t-arrow">-&gt; T.Col</code><div>Foreign key to a specific (PK or unique) column.</div>
           <code class="t-flag">[delete cascade]</code><div>Last on a <b>-&gt;</b> line: deleting the row it points to deletes this row too. <b>[delete set null]</b> empties the column instead (it must be <b>null</b>); <b>[update cascade]</b> follows a changed key.</div>

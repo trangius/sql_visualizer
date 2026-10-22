@@ -56,6 +56,8 @@ Enrollment
 | `auto_increment` / `a_i` | The database numbers the rows itself. An integer `Id` gets this on its own. |
 | `pk (A, B)` | One primary key over several columns: only the combination must be unique. |
 | `unique (A, B)` | The combination of columns is unique. |
+| `index` | An index on the column, so searches and JOINs on it are fast. |
+| `index (A, B)` | One index over several columns. |
 | `-> Table` | Foreign key to that table's primary key. The column takes its type. |
 | `-> Table.Col` | Foreign key to a specific primary key or unique column. |
 | `[delete cascade]` | Last on a `->` line: deleting the referenced row deletes this row too. `[delete set null]` empties the column instead (it must be `null`); `[update cascade]` follows a changed key. |

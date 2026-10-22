@@ -21,6 +21,13 @@ const fs = require('fs'), path = require('path'), vm = require('vm'), { spawnSyn
 // Simple syntax or SQL (MariaDB's unless a third item says which), and the problem it must
 // report, if any: the same for every database, or { mariadb, sqlite, postgres, mssql }
 const CASES = {
+  'indexes': [`Order
+  Id
+  CustomerId int index
+  Created datetime
+  Total int
+  index (CustomerId, Created, Total)
+`],
   'fk to a column without an index': [`Owner
   Id
   Email

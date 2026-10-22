@@ -13,7 +13,7 @@ function hlTextLine(line, st, hues = {}) {
   const com = hash >= 0 ? `<span class="h-com">${esc(line.slice(hash))}</span>` : '';
   if (!code.trim()) return esc(code) + com;
   if (!/^\s/.test(code)) return `<span class="h-tbl">${esc(code)}</span>` + com;
-  const key = code.match(/^(\s+)(pk|unique)(\s*\()([^)]*)(\)?)([\s\S]*)$/i); // pk (A, B) / unique (A, B)
+  const key = code.match(/^(\s+)(pk|unique|index)(\s*\()([^)]*)(\)?)([\s\S]*)$/i); // pk (A, B) / unique (A, B) / index (A, B)
   if (key) {
     return esc(key[1]) + hued('h-flag', hues.key, esc(key[2])) + esc(key[3]) +
       key[4].split(/(,)/).map(p => p === ',' ? ',' : hued('h-col', hues.key, esc(p))).join('') + esc(key[5] + key[6]) + com;

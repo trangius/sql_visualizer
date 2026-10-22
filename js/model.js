@@ -57,10 +57,11 @@ function sqlType(t) {
 // model: { tables: [{ name, line, cols: [{ name, type, pk, nullable, unique, auto, ref, refCol, line }], pkLine, uniques }] }
 // auto: written auto_increment (or a_i); an integer Id that is the primary key on its own counts without it (autoInc)
 // ref/refCol: "-> Table" (its primary key, refCol null) or "-> Table.Column"
-// pkLine / uniques: keys over several columns, written on their own line: "pk (A, B)", "unique (A, B)"
+// pkLine / uniques: keys over several columns, written on their own line: "pk (A, B)", "unique (A, B)";
+// indexes: "index" after a column, or "index (A, B)" over several
 
-const FLAG = /^\(?(pk|null|unique|auto_increment|a_i)\)?$/i;
-const KEY_LINE = /^\s+(pk|unique)\s*\(([^)]*)\)?\s*$/i;
+const FLAG = /^\(?(pk|null|unique|index|auto_increment|a_i)\)?$/i;
+const KEY_LINE = /^\s+(pk|unique|index)\s*\(([^)]*)\)?\s*$/i;
 // The name an index gets in the SQL when none was given
 const indexName = (table, cols) => `idx_${table}_${cols.join('_')}`;
 
@@ -132,8 +133,8 @@ function parseText(src) {
       return;
     }
 
-    if (/^\s+index\b\s*(?:[\p{L}_][\p{L}\p{N}_$]*\s*)?\(/iu.test(code)) {
-      problems.push(problem(line, 'Indexes are not supported in Simple mode.'));
+    if (/^\s+index\s+[\p{L}_][\p{L}\p{N}_$]*\s*\(/iu.test(code)) {
+      problems.push(problem(line, 'Write index (Column, Column) without a name: Simple names the index itself'));
       return;
     }
 
@@ -144,6 +145,7 @@ function parseText(src) {
       else if (names.some(n => !IDENT.test(n))) {
         problems.push(problem(line, `Write ${key[1].toLowerCase()} (Column, Column) with the columns that together form the key`));
       } else if (key[1].toLowerCase() === 'unique') cur.uniques.push({ cols: names, line });
+      else if (key[1].toLowerCase() === 'index') cur.indexes.push({ name: null, cols: names, line });
       else if (cur.pkLine) problems.push(problem(line, `${cur.name} already has a pk (…) line on line ${cur.pkLine.line}`));
       else cur.pkLine = { cols: names, line };
       return;
@@ -183,15 +185,12 @@ function parseText(src) {
       onDelete: null, onUpdate: null, default: null };
     const typeParts = [];
     for (const t of toks) {
-      if (/^\(?index\)?$/i.test(t)) {
-        problems.push(problem(line, 'Indexes are not supported in Simple mode.'));
-        continue;
-      }
       const f = t.match(FLAG);
       if (!f) typeParts.push(t);
       else if (f[1].toLowerCase() === 'pk') col.pk = true;
       else if (f[1].toLowerCase() === 'null') col.nullable = true;
       else if (f[1].toLowerCase() === 'unique') col.unique = true;
+      else if (f[1].toLowerCase() === 'index') cur.indexes.push({ name: null, cols: [name], line });
       else col.auto = true;
     }
     col.type = typeParts.join(' ') || null;
@@ -416,6 +415,11 @@ function genText(tables, notes) {
     for (const n of notes) out.push(`#   ${n.msg}`);
     out.push('');
   }
+  // MariaDB's script gives a column a foreign key points to an index of its own, unless a key starts with it:
+  // read back, that index goes without saying
+  const pointedTo = new Set(tables.flatMap(t => t.cols.filter(c => c.target).map(c => c.targetCol)));
+  const implied = (t, c) => pointedTo.has(c) && !c.unique && t.pkCols[0] !== c && !t.multiUniques.some(u => u.cols[0] === c) &&
+    !t.multiIndexes.some(ix => ix.cols[0] === c.name);
   tables.forEach((t, i) => {
     if (i) out.push('');
     out.push(t.name);
@@ -426,6 +430,7 @@ function genText(tables, notes) {
       if (c.isPk && !pkLine && (c.pk || t.pkLine)) parts.push('pk');
       if (c.nullable) parts.push('null');
       if (c.unique) parts.push('unique');
+      if (c.indexed && !implied(t, c)) parts.push('index');
       if (c.autoInc && !isIdName(c.name)) parts.push('auto_increment'); // on Id it goes without saying
       if (c.ref) parts.push('-> ' + refText(c));
       const opts = optsItems(c);
@@ -434,6 +439,7 @@ function genText(tables, notes) {
     }
     if (pkLine) out.push(`  pk (${t.pkCols.map(c => c.name).join(', ')})`);
     for (const u of t.multiUniques) out.push(`  unique (${u.cols.map(c => c.name).join(', ')})`);
+    for (const ix of t.multiIndexes) out.push(`  index (${ix.cols.join(', ')})`);
   });
   return out.join('\n') + '\n';
 }
