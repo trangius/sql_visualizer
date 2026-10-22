@@ -404,8 +404,14 @@ function dedupe(t, rows) {
 const isJunction = t => t.pkCols.length > 1 && t.pkCols.every(c => c.ref || c.implicit);
 
 // The language of the whole diagram, from the names in it: their letters, the table names
-// of each language, and the words of each language's column names
+// of each language, and the words of each language's column names. Asked for every table
+// drawn, so it is worked out once per model.
+const langCache = new WeakMap();
 function schemaLang(tables) {
+  if (!langCache.has(tables)) langCache.set(tables, guessLang(tables));
+  return langCache.get(tables);
+}
+function guessLang(tables) {
   const score = Object.fromEntries(K.langs.map(l => [l, 0]));
   for (const n of tables.flatMap(t => [t.name, ...t.cols.map(c => c.name)])) {
     for (const l of K.langs) {
@@ -431,15 +437,19 @@ function sampleLang(tables) {
 }
 
 // The language to make data in, if its data is loaded; otherwise null, and the loading
-// starts (onSampleData() is called when it is done, to draw the diagram again)
+// starts (onSampleData() is called once when it is done, to draw the diagram again; it is
+// asked for every table drawn meanwhile)
+const waiting = new Set();
+function whenLoaded(what, load) {
+  if (failed.has(what) || waiting.has(what)) return;
+  waiting.add(what);
+  load().then(d => { waiting.delete(what); if (!d) failed.add(what); onSampleData(); });
+}
 function readyLang(tables) {
-  if (!K) {
-    if (!failed.has('kinds')) loadSampleKinds().then(k => { if (!k) failed.add('kinds'); onSampleData(); });
-    return null;
-  }
+  if (!K) { whenLoaded('kinds', loadSampleKinds); return null; }
   const lang = sampleLang(tables);
   if (langData(lang)) return lang;
-  if (!failed.has(lang)) loadSampleLang(lang).then(d => { if (!d) failed.add(lang); onSampleData(); });
+  whenLoaded(lang, () => loadSampleLang(lang));
   return null;
 }
 
