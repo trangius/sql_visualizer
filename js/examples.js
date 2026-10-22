@@ -7,27 +7,27 @@ const EXAMPLES = {
 Student
   Id
   Name vc(100)
-  Email vc(100)
-  DateOfBirth date
+  Email vc(100) unique
+  DateOfBirth date null
 
 Teacher
   Id
   Name vc(100)
-  Email vc(100)
+  Email vc(100) unique
 
 Course
   Id
   Name vc(100)
   Credits int
-  TeacherId -> Teacher
+  TeacherId null -> Teacher [delete set null]  # null = no teacher yet
 
 # Junction table: Student ↔ Course
 Enrollment
-  Id
-  StudentId -> Student
-  CourseId -> Course
-  EnrollmentDate date
-  Grade int  # 0 = IG, 1 = G, 2 = VG
+  StudentId -> Student [delete cascade]
+  CourseId -> Course [delete cascade]
+  EnrollmentDate date [default now]
+  Grade int null  # null = not graded yet
+  pk (StudentId, CourseId)
 `,
   dogs: `# DogExhibition
 Owner
