@@ -257,6 +257,153 @@ Kirja
   Hinta decimal(6,2)
   KurssiId null -> Kurssi
 `,
+  'schule (de)': `# Schuldatenbank
+Schüler
+  Id
+  Vorname
+  Nachname
+  Geburtsdatum date
+  Versicherungsnummer vc(12) unique
+  EMail vc(100) unique
+  Telefon vc(20)
+  Straße
+  PLZ vc(5)
+  Ort
+  Bundesland
+
+Lehrer
+  Id
+  Vorname
+  Nachname
+  Gehalt decimal(8,2)
+  EMail vc(100) unique
+
+Kurs
+  Id
+  Bezeichnung vc(100)
+  Kurskürzel vc(10) unique
+  Leistungspunkte decimal(4,1)
+  LehrerId null -> Lehrer [delete set null]
+  RaumId null -> Raum
+
+Raum
+  Id
+  Bezeichnung vc(50)
+  Sitzplätze int
+  Stockwerk tinyint
+
+# Welche Schüler welche Kurse belegen
+Anmeldung
+  SchülerId -> Schüler [delete cascade]
+  KursId -> Kurs [delete cascade]
+  Anmeldedatum date
+  Note tinyint null
+  pk (SchülerId, KursId)
+
+Lehrbuch
+  Id
+  Titel
+  Autor
+  Erscheinungsjahr year
+  Preis decimal(8,2)
+  KursId -> Kurs
+`,
+  'ecole (fr)': `# Ecole
+Professeur
+  Id
+  Prenom
+  Nom
+  Courriel vc(100) unique
+  Telephone vc(20)
+  Salaire decimal(8,2)
+
+Eleve
+  Id
+  Prenom
+  Nom
+  DateNaissance date
+  NumeroSecu char(15) unique
+  Adresse
+  CodePostal char(5)
+  Ville
+
+Matiere
+  Id
+  Libelle vc(100)
+
+Cours
+  Id
+  Intitule vc(100)
+  CodeCours vc(10) unique
+  CreditsEcts int
+  MatiereId -> Matiere
+  ProfesseurId null -> Professeur
+
+Inscription
+  EleveId -> Eleve
+  CoursId -> Cours
+  DateInscription date
+  Note decimal(4,2) null
+  pk (EleveId, CoursId)
+
+Manuel
+  Id
+  Titre vc(100)
+  Auteur
+  AnneeParution int
+  Prix decimal(6,2)
+  CoursId null -> Cours
+`,
+  'escuela (es)': `# Base de datos del colegio
+Alumno
+  Id
+  Nombre
+  Apellidos
+  FechaNacimiento date
+  DNI vc(9) unique
+  Correo vc(100) unique
+  Teléfono vc(11)
+  Dirección
+  CodigoPostal vc(5)
+  Ciudad
+
+Profesor
+  Id
+  Nombre
+  Apellidos
+  Sueldo decimal(8,2)
+  Correo vc(100) unique
+
+Curso
+  Id
+  Nombre vc(100)
+  Código vc(10) unique
+  Créditos decimal(4,1)
+  ProfesorId null -> Profesor [delete set null]
+  AulaId null -> Aula
+
+Aula
+  Id
+  Nombre vc(50)
+  Capacidad int
+  Planta tinyint
+
+# Qué alumnos están en qué cursos
+Matrícula
+  AlumnoId -> Alumno [delete cascade]
+  CursoId -> Curso [delete cascade]
+  FechaMatricula date
+  Nota decimal(4,2) null
+  pk (AlumnoId, CursoId)
+
+Libro
+  Id
+  Título
+  Autor
+  AñoPublicación year
+  Precio decimal(8,2)
+  CursoId -> Curso
+`,
   'keys': `Room
   Id
   Name vc(5)
