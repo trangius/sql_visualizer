@@ -203,9 +203,7 @@ body.panel-collapsed #left, body.panel-collapsed #split { display: none; }
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .logo { width: 32px; height: 32px; flex: none; display: block; }
-.title { font-weight: 600; font-size: 14.5px; letter-spacing: -.01em; white-space: nowrap; }
-/* narrow screens: drop the name, then the toolbar labels (the buttons keep their tooltips) */
-@media (max-width: 1100px) { .brand .title { display: none; } }
+/* narrow screens: drop the toolbar labels (the buttons keep their tooltips) */
 @media (max-width: 760px) { .appbar .tool .lbl { display: none; } .appbar .tool { padding: 0 8px; } }
 
 .menu-wrap { position: relative; }
