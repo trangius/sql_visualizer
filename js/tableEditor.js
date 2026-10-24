@@ -520,27 +520,70 @@ function deleteTable() {
     btn.textContent = 'Click again to delete';
     return;
   }
-  const t = textModel().tables.find(t => t.name === dlg.orig);
-  if (t) {
-    histBegin('delete table');
-    const lines = state.text.split('\n');
-    const [s, e] = blockRange(lines, t.line - 1);
-    lines.splice(s, e - s + 1);
-    while (s < lines.length && !lines[s].trim() && (s === 0 || !lines[s - 1].trim())) lines.splice(s, 1);
-    delete pos[t.name];
-    saveDoc();
-    closeTableEditor();
-    commitText(lines.join('\n'), null);
-    histCommit();
-    toast(`Deleted ${t.name}`, 'Undo', histUndo);
-  } else {
-    closeTableEditor();
-  }
+  const name = dlg.orig;
+  closeTableEditor();
+  deleteTables([name]);
 }
 function disarmDelete() {
   const btn = $('#tdDelete');
   btn.classList.remove('armed');
   btn.textContent = 'Delete table';
+}
+
+// ─── Deleting and duplicating tables (the dialog, the keys for the selected tables) ──
+
+// Their lines go, from the bottom up so the line numbers of the others still hold; Undo in the toast
+function deleteTables(names) {
+  const doomed = textModel().tables.filter(t => names.includes(t.name)).sort((a, b) => b.line - a.line);
+  if (!doomed.length) return;
+  histBegin(doomed.length > 1 ? 'delete tables' : 'delete table');
+  const lines = state.text.split('\n');
+  for (const t of doomed) {
+    const [s, e] = blockRange(lines, t.line - 1);
+    lines.splice(s, e - s + 1);
+    while (s < lines.length && !lines[s].trim() && (s === 0 || !lines[s - 1].trim())) lines.splice(s, 1);
+    delete pos[t.name];
+  }
+  saveDoc();
+  setSelected([...selected].filter(n => !names.includes(n)));
+  commitText(lines.join('\n'), null);
+  histCommit();
+  toast(doomed.length > 1 ? `Deleted ${doomed.length} tables` : `Deleted ${doomed[0].name}`, 'Undo', histUndo);
+}
+
+// Copies at the end of the text, named TableCopy (TableCopy2, …), placed like new tables and selected.
+// A foreign key to a table copied along points to its copy (so a self-reference stays one).
+function duplicateTables(names) {
+  const { tables } = textModel();
+  const originals = tables.filter(t => names.includes(t.name));
+  if (!originals.length) return;
+  const taken = new Set(tables.map(t => lc(t.name))), copyOf = new Map();
+  for (const t of originals) {
+    let n = t.name + 'Copy';
+    for (let k = 2; taken.has(lc(n)); k++) n = t.name + 'Copy' + k;
+    taken.add(lc(n));
+    copyOf.set(lc(t.name), n);
+  }
+  histBegin(originals.length > 1 ? 'duplicate tables' : 'duplicate table');
+  const lines = state.text.split('\n');
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  for (const t of originals) {
+    const [s, e] = blockRange(lines, t.line - 1);
+    const block = lines.slice(s, e + 1), copy = copyOf.get(lc(t.name));
+    block[0] = copy + block[0].slice(block[0].indexOf(t.name) + t.name.length);
+    for (const c of t.cols) {
+      const to = c.ref && copyOf.get(lc(c.ref));
+      if (to) block[c.line - 1 - s] = block[c.line - 1 - s].replace(REF_RE, '-> ' + to + (c.refCol ? '.' + c.refCol : ''));
+    }
+    if (lines.length) lines.push('');
+    lines.push(...block);
+    delete pos[copy];
+  }
+  lines.push('');
+  saveDoc();
+  commitText(lines.join('\n'), null);
+  histCommit();
+  setSelected([...copyOf.values()]);
 }
 
 // Write new text into the editor (in SQL mode the SQL is regenerated from it).
@@ -602,6 +645,19 @@ dlgEl.addEventListener('keydown', e => {
   // Enter in the last column's name adds another column; anywhere else it saves
   if (row && e.target.classList.contains('c-name') && +row.dataset.i === dlg.cols.length - 1 && e.target.value.trim()) addColumn();
   else saveTable();
+});
+
+// ⌫ / Delete and ⌘D act on the tables selected in the diagram, unless you are typing
+document.addEventListener('keydown', e => {
+  if (!selected.size || !dlgEl.hidden || !$('#confirmDlg').hidden || e.target.closest('input, textarea, [contenteditable]')) return;
+  const mod = e.metaKey || e.ctrlKey;
+  if ((e.key === 'Backspace' || e.key === 'Delete') && !mod && !e.altKey) {
+    e.preventDefault();
+    deleteTables([...selected]);
+  } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd') {
+    e.preventDefault(); // not the browser's bookmark
+    duplicateTables([...selected]);
+  }
 });
 
 svg.addEventListener('dblclick', e => {
