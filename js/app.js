@@ -553,9 +553,11 @@ function renderDataLang() {
     `<span class="check">${state.sampleLang === id ? '✓' : ''}</span><span class="item-name">${esc(name)}</span></button>`;
   $('#dataLangList').innerHTML = item(null, `Guess (${langs.find(l => l.id === guess)?.name ?? guess})`) + langs.map(l => item(l.id, l.name)).join('');
 }
-// the data has arrived (see sample.js): draw it, and the language it is in
+// the data has arrived (see sample.js): draw it, and the language it is in. The tables were
+// spread out while their boxes were still empty, so spread them out again now they are full.
 function onSampleData() {
   drawDiagram();
+  if (state.dataView) { autoLayout(); fit(); }
   renderDataLang();
 }
 $('#dataLangList').addEventListener('click', e => {
