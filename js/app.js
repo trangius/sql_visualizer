@@ -108,7 +108,7 @@ function lineHues(tables) {
 const redecorate = () => decorateEditor(lastProblems);
 
 // Status bar: the first problem (click to jump there), and the diagram's size
-let firstProblem = null;
+let firstProblem = null, problemsShown = []; // the problems as listed
 function updateStatus(problems) {
   const sorted = [...problems].sort((a, b) => (a.line ?? 0) - (b.line ?? 0) || (a.level === 'error' ? -1 : 1));
   firstProblem = sorted[0] ?? null;
@@ -120,11 +120,17 @@ function updateStatus(problems) {
     ? (state.mode === 'sql' ? `${dialectOf(state.dialect).name} · No problems` : 'No problems')
     : `${n} problem${n > 1 ? 's' : ''} · ${firstProblem.line ? 'Line ' + firstProblem.line + ': ' : ''}${firstProblem.msg}`;
   $('#statusText').title = n ? 'Click to see all problems' : '';
+  // a problem fixed by creating the missing table: a button for it, beside the first one and in the list
+  const fix = p => p.create ? `Create table ${p.create.table}` : '';
+  $('#fixBtn').hidden = !firstProblem?.create;
+  $('#fixBtn').textContent = fix(firstProblem ?? {});
   // the expandable list of every problem (closes by itself when there are none)
-  $('#problemList').innerHTML = sorted.map(p =>
-    `<button class="problem ${p.level}" role="listitem" data-line="${p.line ?? ''}">` +
+  $('#problemList').innerHTML = sorted.map((p, i) =>
+    `<div class="problem-row" role="listitem"><button class="problem ${p.level}" data-line="${p.line ?? ''}">` +
     `<span class="dot"></span><span class="where">${p.line ? 'Line ' + p.line : ''}</span>` +
-    `<span>${esc(p.msg)}</span></button>`).join('');
+    `<span>${esc(p.msg)}</span></button>` +
+    (p.create ? `<button class="btn-outline fix-btn" data-fix="${i}">${esc(fix(p))}</button>` : '') + '</div>').join('');
+  problemsShown = sorted;
   if (!n) setProblemList(false);
   const tables = model.tables ?? [];
   const rels = tables.reduce((k, t) => k + t.cols.filter(c => c.target).length, 0);
@@ -135,7 +141,10 @@ function setProblemList(open) {
   $('#statusBtn').setAttribute('aria-expanded', String(open));
 }
 $('#statusBtn').onclick = () => { if (firstProblem) setProblemList($('#problemList').hidden); };
+$('#fixBtn').onclick = () => { if (firstProblem?.create) createTable(firstProblem.create); };
 $('#problemList').addEventListener('click', e => {
+  const fix = e.target.closest('[data-fix]');
+  if (fix) return createTable(problemsShown[+fix.dataset.fix].create);
   const b = e.target.closest('.problem');
   if (b?.dataset.line) selectLine(+b.dataset.line);
 });

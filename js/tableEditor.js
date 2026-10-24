@@ -551,6 +551,25 @@ function deleteTables(names) {
   toast(doomed.length > 1 ? `Deleted ${doomed.length} tables` : `Deleted ${doomed[0].name}`, 'Undo', histUndo);
 }
 
+// A table a foreign key points to but that isn't there yet ({ table, col, type } of the problem):
+// at the end of the text with an Id, and the column it points to if that is another one
+function createTable({ table, col, type }) {
+  const { tables } = textModel();
+  if (tables.some(t => lc(t.name) === lc(table))) return;
+  histBegin('new table');
+  const lines = state.text.split('\n');
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  if (lines.length) lines.push('');
+  const at = lines.length + 1;
+  lines.push(table, '  Id');
+  if (col && !isIdName(col)) lines.push(`  ${col}${type ? ' ' + type : ''} unique`);
+  lines.push('');
+  delete pos[table];
+  saveDoc();
+  commitText(lines.join('\n'), at);
+  histCommit();
+}
+
 // Copies at the end of the text, named TableCopy (TableCopy2, …), placed like new tables and selected.
 // A foreign key to a table copied along points to its copy (so a self-reference stays one).
 function duplicateTables(names) {

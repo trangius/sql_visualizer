@@ -355,7 +355,11 @@ function resolve(tables, implicit = false) {
           ? `${tt.name} has a primary key of several columns. Write -> ${tt.name}.Column`
           : `${tt.name} has no primary key. Write -> ${tt.name}.Column`;
       }
-      if (c.refError) problems.push(problem(c.line, c.refError)); // what the database says about it: dialectProblems()
+      if (c.refError) {
+        const p = problem(c.line, c.refError); // what the database says about it: dialectProblems()
+        if (!tt && IDENT.test(c.ref)) p.create = { table: c.ref, col: c.refCol, type: c.type }; // fixed by creating the table
+        problems.push(p);
+      }
     }
   }
   for (const t of tables) {

@@ -427,6 +427,11 @@ main { flex: 1; display: flex; min-height: 0; }
 .problem .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); transform: translateY(-1px); }
 .problem.warn .dot { background: var(--warn); }
 .problem .where { font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.problem-row { display: flex; align-items: center; gap: 6px; }
+.problem-row .problem { flex: 1; min-width: 0; }
+/* a problem that one click fixes: Create table X */
+.fix-btn { flex: none; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; white-space: nowrap; }
+.problem-row .fix-btn { margin-right: 4px; }
 .summary { white-space: nowrap; }
 
 /* ─── Canvas ──────────────────────────────────────────────────────────────── */
