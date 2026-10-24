@@ -209,6 +209,9 @@ const themeKey = () => THEMES[state.colors] ? state.colors : 'bleak';
 function applyPalette() {
   const root = document.documentElement.style;
   for (const [k, col] of Object.entries(themeVars(themeKey(), isDark()))) root.setProperty('--' + k, col);
+  // the app's icon (top bar and browser tab) in the theme's colours
+  const icon = `icons/icon-${themeKey()}${isDark() ? '-dark' : ''}.svg`;
+  $('#logo').src = $('#favicon').href = icon;
   renderThemeMenu();
 }
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SQL Visualizer</title>
-<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link id="favicon" rel="icon" href="icons/icon-bleak.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -15,12 +15,19 @@
     const t = JSON.parse(localStorage.getItem('sqlviz.theme'));
     if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
   } catch {}
+  // and the app's icon in the saved theme, so it doesn't flash another one (applyPalette keeps it up to date)
+  try {
+    const k = JSON.parse(localStorage.getItem('sqlviz.settings'))?.colors;
+    const dark = (document.documentElement.dataset.theme ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark';
+    document.getElementById('favicon').href = `icons/icon-${typeof k === 'string' && /^[a-z]+$/.test(k) ? k : 'bleak'}${dark ? '-dark' : ''}.svg`;
+  } catch {}
 </script>
 </head>
 <body>
 <header class="appbar">
   <div class="brand">
-    <img class="logo" src="icon.svg" alt="SQL Visualizer" title="SQL Visualizer" width="32" height="32">
+    <img id="logo" class="logo" alt="SQL Visualizer" title="SQL Visualizer" width="32" height="32">
+    <script>document.getElementById('logo').src = document.getElementById('favicon').href; // the icon chosen in <head></script>
   </div>
   <div class="find-slot">
     <div id="finder" class="finder">
