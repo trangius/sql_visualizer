@@ -60,7 +60,8 @@ function blockRange(lines, start) {
   return [start, end];
 }
 
-function openTableEditor(name, at = null) {
+// col: the column to start on (the one double-clicked in the diagram), else the table name
+function openTableEditor(name, at = null, col = null) {
   const { tables } = textModel();
   const t = name ? tables.find(t => t.name === name) : null;
   const lines = state.text.split('\n');
@@ -82,7 +83,10 @@ function openTableEditor(name, at = null) {
   renderCols();
   dlg.start = snapshot();
   dlgEl.hidden = false;
-  if (t) tdName.select(); else tdName.focus();
+  const colIn = col != null && tdCols.querySelector(`.col-row[data-i="${dlg.cols.findIndex(c => c.name === col)}"] .c-name`);
+  if (colIn) { colIn.select(); colIn.scrollIntoView({ block: 'nearest' }); }
+  else if (t) tdName.select();
+  else tdName.focus();
 }
 
 function closeTableEditor() {
@@ -603,9 +607,10 @@ dlgEl.addEventListener('keydown', e => {
 svg.addEventListener('dblclick', e => {
   // the canvas captures the pointer on mousedown (for dragging), so the event's target
   // is the canvas itself: ask what is really under the pointer
-  const g = document.elementFromPoint(e.clientX, e.clientY)?.closest('.tbl');
+  const el = document.elementFromPoint(e.clientX, e.clientY), g = el?.closest('.tbl');
   if (g) {
-    openTableEditor(g.dataset.t);
+    const key = el.closest('.row')?.dataset.key; // "Table.Column"
+    openTableEditor(g.dataset.t, null, key ? key.slice(g.dataset.t.length + 1) : null);
   } else {
     const w = toWorld(e);
     openTableEditor(null, { x: snap(w.x - 20), y: snap(w.y - 15) });
