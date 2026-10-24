@@ -647,17 +647,70 @@ dlgEl.addEventListener('keydown', e => {
   else saveTable();
 });
 
-// ⌫ / Delete and ⌘D act on the tables selected in the diagram, unless you are typing
+// The table a selection of one is, if it still exists
+const selectedTable = () => selected.size === 1 ? model.tables.find(t => selected.has(t.name)) ?? null : null;
+
+// ↵ (edit), ⌫ / Delete and ⌘D act on the tables selected in the diagram, unless you are typing
 document.addEventListener('keydown', e => {
   if (!selected.size || !dlgEl.hidden || !$('#confirmDlg').hidden || e.target.closest('input, textarea, [contenteditable]')) return;
   const mod = e.metaKey || e.ctrlKey;
   if ((e.key === 'Backspace' || e.key === 'Delete') && !mod && !e.altKey) {
     e.preventDefault();
+    closeMenus();
     deleteTables([...selected]);
   } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd') {
     e.preventDefault(); // not the browser's bookmark
+    closeMenus();
     duplicateTables([...selected]);
+  } else if (e.key === 'Enter' && !mod && selectedTable() && !e.target.closest('button, a, select')) {
+    e.preventDefault();
+    closeMenus();
+    openTableEditor(selectedTable().name);
   }
+});
+
+// ─── Right-click menu of a table ─────────────────────────────────────────────
+
+const tableMenu = $('#tableMenu');
+const tableMenuItems = () => [...tableMenu.querySelectorAll('button')].filter(b => !b.hidden);
+
+svg.addEventListener('contextmenu', e => {
+  const g = document.elementFromPoint(e.clientX, e.clientY)?.closest('.tbl');
+  if (!g) return; // the empty canvas keeps the browser's menu
+  e.preventDefault();
+  if (!selected.has(g.dataset.t)) setSelected([g.dataset.t]);
+  closeMenus();
+  // several selected: only what works on all of them
+  const n = selected.size;
+  for (const el of tableMenu.querySelectorAll('.one')) el.hidden = n > 1;
+  $('#tmDup').textContent = n > 1 ? `Duplicate ${n} tables` : 'Duplicate';
+  $('#tmDel').textContent = n > 1 ? `Delete ${n} tables` : 'Delete';
+  tableMenu.hidden = false;
+  const r = tableMenu.getBoundingClientRect();
+  tableMenu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - r.width - 8)) + 'px';
+  tableMenu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - r.height - 8)) + 'px';
+  tableMenu.focus(); // for ↓ ↑ and the shortcuts; Esc closes it
+});
+
+tableMenu.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.stopPropagation(); return closeMenus(); } // the menu only, the selection stays
+  const items = tableMenuItems(), i = items.indexOf(document.activeElement);
+  const to = { ArrowDown: i + 1, ArrowUp: i < 0 ? -1 : i - 1, Home: 0, End: items.length - 1 }[e.key];
+  if (to === undefined) return;
+  e.preventDefault();
+  items[(to + items.length) % items.length].focus();
+});
+
+tableMenu.addEventListener('click', e => {
+  const cmd = e.target.closest('[data-cmd]')?.dataset.cmd, t = selectedTable();
+  if (!cmd) return;
+  closeMenus();
+  if (cmd === 'dup') duplicateTables([...selected]);
+  else if (cmd === 'del') deleteTables([...selected]);
+  else if (!t) return;
+  else if (cmd === 'edit') openTableEditor(t.name);
+  else if (cmd === 'addcol') { openTableEditor(t.name); addColumn(); }
+  else if (cmd === 'show') selectLine(t.line);
 });
 
 svg.addEventListener('dblclick', e => {

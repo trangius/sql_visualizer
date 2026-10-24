@@ -588,6 +588,7 @@ applyDataView();
 // Menus: Export (app bar) and Text colours (editor header)
 const MENUS = [];
 function closeMenus() {
+  $('#tableMenu').hidden = true; // the diagram's right-click menu (see tableEditor.js)
   for (const [btn, menu] of MENUS) {
     if ($(menu).contains(document.activeElement)) $(btn).focus(); // e.g. an item picked with Enter
     $(menu).hidden = true;

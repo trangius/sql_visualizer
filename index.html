@@ -202,7 +202,8 @@
           <span>⇧/⌘ + click a table</span><span>Add it to the selection</span>
           <span>⇧ + drag canvas</span><span>Select tables in a box</span>
           <span>Drag a selected table</span><span>Move all selected</span>
-          <span>⌫ / ⌘D</span><span>Delete / duplicate the selected tables</span>
+          <span>↵ / ⌫ / ⌘D</span><span>Edit / delete / duplicate the selected tables</span>
+          <span>Right-click a table</span><span>Edit it, add a column, duplicate or delete it</span>
           <span>Drag canvas</span><span>Pan</span>
           <span>⌘ + scroll</span><span>Zoom</span>
           <span>Click a row</span><span>Jump to its line</span>
@@ -332,6 +333,18 @@
     <div id="toast" hidden><span id="toastMsg"></span><button id="toastAct"></button></div>
   </section>
 </main>
+
+<!-- right-click on a table: acts on it, or on all the selected tables when it is one of them -->
+<div class="menu-wrap">
+  <div id="tableMenu" class="menu ctx-menu" role="menu" tabindex="-1" hidden>
+    <button class="one" data-cmd="edit" role="menuitem"><span>Edit…</span><span class="ext">↵</span></button>
+    <button class="one" data-cmd="addcol" role="menuitem"><span>Add column</span></button>
+    <button class="one" data-cmd="show" role="menuitem"><span>Show in text</span></button>
+    <div class="one menu-sep"></div>
+    <button data-cmd="dup" role="menuitem"><span id="tmDup">Duplicate</span><span class="ext">⌘D</span></button>
+    <button class="danger" data-cmd="del" role="menuitem"><span id="tmDel">Delete</span><span class="ext">⌫</span></button>
+  </div>
+</div>
 
 <div id="tableDlg" class="dlg-backdrop" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="tdTitle">
