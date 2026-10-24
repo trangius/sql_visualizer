@@ -355,6 +355,18 @@ main { flex: 1; display: flex; min-height: 0; }
 .code.wrap pre, .code.wrap textarea { white-space: pre-wrap; overflow-wrap: anywhere; }
 .code textarea { background: transparent; color: transparent; caret-color: var(--fg); resize: none; outline: none; }
 .code textarea::selection { background: var(--sel); }
+/* suggestions while typing (complete.js) */
+.complete {
+  position: fixed; z-index: 35; min-width: 180px; max-width: 360px; max-height: 232px; overflow: auto; padding: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow);
+}
+.cpl-item {
+  display: flex; align-items: center; gap: 14px; height: 26px; padding: 0 8px; border-radius: 5px;
+  font: 12.5px var(--mono); white-space: nowrap; cursor: pointer;
+}
+.cpl-item .hint { margin-left: auto; font: 11.5px var(--font); color: var(--muted); }
+.cpl-item.on { background: var(--accent); color: var(--accent-fg); }
+.cpl-item.on .hint { color: inherit; opacity: .75; }
 .h-tbl { color: var(--fg); } /* plain: the colours in the editor belong to the keys */
 .h-col { color: var(--fg); }
 .h-type { color: var(--tok-type); }
