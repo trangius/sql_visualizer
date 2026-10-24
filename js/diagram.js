@@ -1022,6 +1022,99 @@ svg.addEventListener('wheel', e => {
   }
 }, { passive: false });
 
+// Glide the view to { tx, ty, s }
+let glide = 0;
+function glideTo(to, ms = 240) {
+  cancelAnimationFrame(glide);
+  const from = { ...view }, t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms), e = 1 - (1 - k) ** 3;
+    for (const p of ['tx', 'ty', 's']) view[p] = from[p] + (to[p] - from[p]) * e;
+    applyView();
+    if (k < 1) glide = requestAnimationFrame(step);
+  };
+  glide = requestAnimationFrame(step);
+}
+
+// A table in the middle of the screen (at 100% if it was smaller), selected; a column of it lit up for a moment
+function focusTable(name, col = null) {
+  const t = model.tables.find(t => t.name === name), b = t && geometry.boxes.get(t), r = svg.getBoundingClientRect();
+  if (!b || !r.width) return;
+  const s = Math.max(view.s, 1);
+  glideTo({ s, tx: r.width / 2 - (b.x + b.w / 2) * s, ty: (CARD_TOP + r.height - CARD_BOTTOM) / 2 - (b.y + b.h / 2) * s });
+  setSelected([name]);
+  const row = col && vp.querySelector(`.tbl[data-t="${CSS.escape(name)}"] .row[data-key="${CSS.escape(name + '.' + col)}"]`);
+  if (row) { row.classList.add('kh'); setTimeout(() => row.classList.remove('kh'), 1500); }
+}
+
+// ─── Find (⌘K): tables, then columns, whose name has what is typed ───────────
+
+const finder = $('#finder'), findInput = $('#findInput'), findList = $('#findList');
+let found = [], foundAt = 0;
+
+function openFinder() {
+  closeMenus();
+  finder.hidden = false;
+  findInput.select();
+  findInput.focus();
+  renderFinder();
+}
+function closeFinder() {
+  finder.hidden = true;
+  if (finder.contains(document.activeElement)) document.activeElement.blur();
+}
+
+function renderFinder() {
+  const q = findInput.value.trim().toLowerCase();
+  const hit = s => s.toLowerCase().indexOf(q);
+  const mark = (s, i) => i < 0 || !q ? esc(s) : esc(s.slice(0, i)) + `<b>${esc(s.slice(i, i + q.length))}</b>` + esc(s.slice(i + q.length));
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  // names that start with it first
+  const rank = list => list.filter(x => hit(x.name) >= 0).sort((a, b) => (hit(a.name) > 0) - (hit(b.name) > 0) || byName(a, b));
+  const tables = rank(model.tables.map(t => ({ name: t.name, t, col: false })));
+  const cols = q ? rank(model.tables.flatMap(t => t.cols.map(c => ({ name: c.name, t, col: true })))) : [];
+  found = [...tables, ...cols].slice(0, 50);
+  foundAt = 0;
+  findList.innerHTML = found.map((f, i) =>
+    `<button class="find-item${i ? '' : ' on'}" data-i="${i}" role="option" aria-selected="${!i}" tabindex="-1">` +
+    `<span>${mark(f.name, hit(f.name))}</span><span class="where">${f.col ? 'in ' + esc(f.t.name) : f.t.cols.length + ' columns'}</span></button>`,
+  ).join('') || (model.tables.length ? '<div class="find-empty">No table or column has that in its name</div>' : '');
+}
+
+function pickFound(i) {
+  const f = found[i];
+  if (!f) return;
+  closeFinder();
+  focusTable(f.t.name, f.col ? f.name : null);
+}
+
+function moveFound(d) {
+  if (!found.length) return;
+  foundAt = (foundAt + d + found.length) % found.length;
+  findList.querySelectorAll('.find-item').forEach((b, i) => {
+    b.classList.toggle('on', i === foundAt);
+    b.setAttribute('aria-selected', String(i === foundAt));
+  });
+  findList.children[foundAt].scrollIntoView({ block: 'nearest' });
+}
+
+findInput.addEventListener('input', renderFinder);
+findInput.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); moveFound(e.key === 'ArrowDown' ? 1 : -1); }
+  else if (e.key === 'Enter') { e.preventDefault(); pickFound(foundAt); }
+  else if (e.key === 'Escape') { e.stopPropagation(); closeFinder(); } // the selection stays
+});
+findList.addEventListener('pointerdown', e => e.preventDefault()); // keep the focus in the box
+findList.addEventListener('click', e => { const b = e.target.closest('.find-item'); if (b) pickFound(+b.dataset.i); });
+document.addEventListener('pointerdown', e => { if (!finder.hidden && !e.target.closest('#finder, #findBtn')) closeFinder(); });
+$('#findBtn').onclick = () => finder.hidden ? openFinder() : closeFinder();
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'k') return;
+  if (!$('#tableDlg').hidden || !$('#confirmDlg').hidden) return;
+  e.preventDefault();
+  finder.hidden ? openFinder() : closeFinder();
+});
+
 const viewMiddle = () => { const r = svg.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
 $('#zoomIn').onclick = () => zoomTo(view.s * 1.2, ...viewMiddle());
 $('#zoomOut').onclick = () => zoomTo(view.s / 1.2, ...viewMiddle());

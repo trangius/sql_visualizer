@@ -204,6 +204,7 @@
           <span>Drag a selected table</span><span>Move all selected</span>
           <span>↵ / ⌫ / ⌘D</span><span>Edit / delete / duplicate the selected tables</span>
           <span>Right-click a table</span><span>Edit it, add a column, duplicate or delete it</span>
+          <span>⌘K</span><span>Find a table or column</span>
           <span>Drag canvas</span><span>Pan</span>
           <span>⌘ + scroll</span><span>Zoom</span>
           <span>Click a row</span><span>Jump to its line</span>
@@ -267,6 +268,14 @@
         <svg width="14" height="14" class="ico thin" aria-hidden="true"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="8" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1"/><rect x="8" y="8" width="4.5" height="4.5" rx="1"/></svg>
         Auto layout
       </button>
+      <button id="findBtn" class="tool icon" title="Find a table or column (⌘K)" aria-label="Find a table or column">
+        <svg width="14" height="14" class="ico thin" aria-hidden="true"><circle cx="6" cy="6" r="4.2"/><path d="m9.2 9.2 3.3 3.3"/></svg>
+      </button>
+    </div>
+
+    <div id="finder" class="finder" hidden>
+      <input id="findInput" placeholder="Find a table or column…" spellcheck="false" autocomplete="off" aria-label="Find a table or column" aria-controls="findList">
+      <div id="findList" class="find-list" role="listbox" aria-label="Tables and columns"></div>
     </div>
 
     <div id="dataLangCard" class="card card-tr" hidden>
