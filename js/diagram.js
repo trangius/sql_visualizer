@@ -1047,22 +1047,18 @@ function focusTable(name, col = null) {
   if (row) { row.classList.add('kh'); setTimeout(() => row.classList.remove('kh'), 1500); }
 }
 
-// ─── Find (⌘K): tables, then columns, whose name has what is typed ───────────
+// ─── Find (⌘F / ⌘K, the box in the app bar): tables, then columns, whose name has what is typed ──
 
-const finder = $('#finder'), findInput = $('#findInput'), findList = $('#findList');
+const finder = $('#finder'), findInput = $('#findInput'), findList = $('#findList'), findSlot = finder.parentNode;
 let found = [], foundAt = 0;
 
 function openFinder() {
   closeMenus();
-  finder.hidden = false;
-  findInput.select();
+  if (presentView) { finder.classList.add('floating'); document.body.appendChild(finder); } // the app bar is hidden
   findInput.focus();
-  renderFinder();
+  findInput.select();
 }
-function closeFinder() {
-  finder.hidden = true;
-  if (finder.contains(document.activeElement)) document.activeElement.blur();
-}
+const closeFinder = () => findInput.blur();
 
 function renderFinder() {
   const q = findInput.value.trim().toLowerCase();
@@ -1084,6 +1080,7 @@ function renderFinder() {
 function pickFound(i) {
   const f = found[i];
   if (!f) return;
+  findInput.value = '';
   closeFinder();
   focusTable(f.t.name, f.col ? f.name : null);
 }
@@ -1098,21 +1095,26 @@ function moveFound(d) {
   findList.children[foundAt].scrollIntoView({ block: 'nearest' });
 }
 
+findInput.addEventListener('focus', () => { renderFinder(); findList.hidden = false; });
+findInput.addEventListener('blur', () => {
+  findList.hidden = true;
+  if (finder.classList.contains('floating')) { finder.classList.remove('floating'); findSlot.appendChild(finder); }
+});
+finder.addEventListener('pointerdown', e => { if (e.target !== findInput) { e.preventDefault(); findInput.focus(); } }); // the whole box is the field
 findInput.addEventListener('input', renderFinder);
 findInput.addEventListener('keydown', e => {
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); moveFound(e.key === 'ArrowDown' ? 1 : -1); }
   else if (e.key === 'Enter') { e.preventDefault(); pickFound(foundAt); }
   else if (e.key === 'Escape') { e.stopPropagation(); closeFinder(); } // the selection stays
 });
-findList.addEventListener('pointerdown', e => e.preventDefault()); // keep the focus in the box
 findList.addEventListener('click', e => { const b = e.target.closest('.find-item'); if (b) pickFound(+b.dataset.i); });
-document.addEventListener('pointerdown', e => { if (!finder.hidden && !e.target.closest('#finder, #findBtn')) closeFinder(); });
-$('#findBtn').onclick = () => finder.hidden ? openFinder() : closeFinder();
+// ⌘F and ⌘K go to the box; in the editor ⌘F is still the browser's Find, for the text
 document.addEventListener('keydown', e => {
-  if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'k') return;
-  if (!$('#tableDlg').hidden || !$('#confirmDlg').hidden) return;
+  const k = e.key.toLowerCase();
+  if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || (k !== 'f' && k !== 'k')) return;
+  if (!$('#tableDlg').hidden || !$('#confirmDlg').hidden || (k === 'f' && e.target === ta)) return;
   e.preventDefault();
-  finder.hidden ? openFinder() : closeFinder();
+  openFinder();
 });
 
 const viewMiddle = () => { const r = svg.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };

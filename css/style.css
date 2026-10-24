@@ -477,18 +477,31 @@ body.presenting .card-tl, body.presenting #storageNotice, body.presenting #selec
 .tool:hover { background: var(--hover); }
 .tool.on { background: var(--accent-soft); color: var(--accent); }
 .tool.icon { width: 30px; padding: 0; justify-content: center; }
-/* ⌘K: find a table or column; the view goes to it */
+/* the finder in the app bar (⌘F / ⌘K): a table or column by name; the view goes to it.
+   While presenting (no app bar) it floats over the canvas. */
 .finder {
-  position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 6; width: min(380px, calc(100% - 24px));
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 6px;
+  position: relative; display: flex; align-items: center; width: 280px; height: 32px; cursor: text;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--muted);
 }
-.finder input {
-  width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
-  background: var(--box-bg); font-size: 13px;
+.finder:focus-within { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--box-bg); }
+.find-ico { flex: none; margin-left: 10px; }
+.finder input { flex: 1; min-width: 0; height: 100%; padding: 0 8px; border: 0; background: none; font-size: 13px; outline: none; }
+.finder input::placeholder { color: var(--muted); }
+.find-key { flex: none; padding-right: 9px; font: 11px var(--mono); color: var(--faint); }
+.finder:focus-within .find-key { display: none; }
+.finder.floating { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 40; width: min(380px, calc(100% - 24px)); box-shadow: var(--shadow); }
+.find-list {
+  position: absolute; top: calc(100% + 6px); left: -1px; width: max(100%, 320px); max-height: 360px; overflow: auto; z-index: 30;
+  display: flex; flex-direction: column; gap: 1px; padding: 4px; cursor: default;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
 }
-.finder input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.find-list { max-height: 320px; overflow: auto; margin-top: 4px; display: flex; flex-direction: column; gap: 1px; }
 .find-list:empty { display: none; }
+@media (max-width: 1100px) { .finder { width: 220px; } }
+/* narrow: just the magnifier until it is used */
+@media (max-width: 760px) {
+  .finder:not(:focus-within) { width: 34px; }
+  .finder:not(:focus-within) input, .finder:not(:focus-within) .find-key { width: 0; padding: 0; opacity: 0; }
+}
 .find-item {
   display: flex; align-items: center; gap: 12px; flex: none; height: 30px; padding: 0 9px;
   border: 0; border-radius: 6px; background: none; text-align: left; font: 12.5px var(--mono);

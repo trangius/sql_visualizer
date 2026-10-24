@@ -797,7 +797,7 @@ if (!/mac|iphone|ipad/i.test(navigator.userAgentData?.platform ?? navigator.plat
   const pc = s => s.replace('⇧⌘Z', 'Ctrl+Y').replace('⌘⇧', 'Ctrl+Shift+').replace(/⌘(?=\w)/g, 'Ctrl+').replace(/⇧(?=\w)/g, 'Shift+')
     .replace(/⇧/g, 'Shift').replace(/⌘/g, 'Ctrl').replace(/⌫/g, 'Del').replace(/↵/g, 'Enter');
   for (const el of document.querySelectorAll('[title*="⌘"], [title*="⇧"]')) el.title = pc(el.title);
-  for (const el of document.querySelectorAll('.menu .ext, .help-keys span')) {
+  for (const el of document.querySelectorAll('.menu .ext, .help-keys span, .find-key')) {
     if (/[⌘⇧⌫↵]/.test(el.textContent)) el.textContent = pc(el.textContent);
   }
 }
