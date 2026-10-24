@@ -7,12 +7,17 @@
 const TYPE_SUGGESTIONS = ['vc', 'vc(32)', 'vc(64)', 'vc(256)', 'int', 'bigint', 'tinyint', 'text', 'date', 'datetime', 'decimal(10,2)', 'bool'];
 const SELF = '\u0000self'; // a foreign key to the table being edited, whatever its final name
 const LINK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4.2 4.2 0 0 0 6 0l3-3a4.2 4.2 0 0 0-6-6l-1 1"/><path d="M14 10a4.2 4.2 0 0 0-6 0l-3 3a4.2 4.2 0 0 0 6 6l1-1"/></svg>';
+const GRIP_ICON = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></svg>';
+const MOVE_KEYS = /mac|iphone|ipad/i.test(navigator.userAgentData?.platform ?? navigator.platform) ? '⌥↑ / ⌥↓' : 'Alt+↑ / Alt+↓';
+// the column's yes/no options, as pills: [field, label]
+const FLAGS = [['pk', 'PK'], ['nullable', 'NULL'], ['unique', 'UNIQUE'], ['auto', 'AUTO']];
 
-const dlgEl = $('#tableDlg'), tdName = $('#tdName'), tdCols = $('#tdCols'), tdError = $('#tdError');
+const dlgEl = $('#tableDlg'), tdName = $('#tdName'), tdCols = $('#tdCols');
 $('#typeList').innerHTML = TYPE_SUGGESTIONS.map(t => `<option value="${t}">`).join('');
 
-// dlg: { orig, at, nameComment, tables, fk, cols: [{ name, origName, type, pk, nullable, unique, auto, ref, refCol, comment }] }
+// dlg: { orig, at, nameComment, tables, fk, start, cols: [{ name, origName, type, pk, nullable, unique, auto, ref, refCol, comment }] }
 // dlg.fk: the open foreign-key chooser { row, table, usePk, col, filter }
+// dlg.start: the dialog as it opened (see snapshot), to tell whether closing loses anything
 let dlg = null;
 
 const blankCol = () => ({ name: '', origName: null, type: '', pk: false, nullable: false, unique: false, auto: false, ref: null, refCol: null, comment: '' });
@@ -73,9 +78,9 @@ function openTableEditor(name, at = null) {
   $('#tdDelete').hidden = !t;
   disarmDelete();
   tdName.value = t ? t.name : '';
-  tdName.classList.remove('invalid');
-  tdError.textContent = '';
+  clearError();
   renderCols();
+  dlg.start = snapshot();
   dlgEl.hidden = false;
   if (t) tdName.select(); else tdName.focus();
 }
@@ -83,6 +88,21 @@ function openTableEditor(name, at = null) {
 function closeTableEditor() {
   dlgEl.hidden = true;
   dlg = null;
+}
+
+// The name and the columns that would be saved (empty rows aren't)
+const snapshot = () => JSON.stringify([tdName.value, dlg.cols.filter(c => c.name.trim() || c.type.trim() || c.ref)]);
+
+// Esc and a click outside ask before throwing edits away (Cancel says what it does, so it doesn't)
+async function requestClose() {
+  if (snapshot() === dlg.start) return closeTableEditor();
+  const focus = document.activeElement;
+  const ok = await confirmBox({
+    title: 'Discard changes?',
+    body: dlg.orig ? `Your changes to <b>${esc(dlg.orig)}</b> aren't saved.` : 'The new table isn\'t saved.',
+    ok: 'Discard', cancel: 'Keep editing',
+  });
+  if (ok) closeTableEditor(); else focus?.focus();
 }
 
 // ─── What a foreign key can point to ─────────────────────────────────────────
@@ -122,57 +142,62 @@ function refLabel(c) {
 // ─── Column rows ─────────────────────────────────────────────────────────────
 
 function renderCols() {
-  tdCols.innerHTML = dlg.cols.map((c, i) => `
+  tdCols.innerHTML = dlg.cols.map((c, i) => {
+    const target = c.ref && refLabel(c);
+    return `
     <div class="col-row${dlg.fk?.row === i ? ' fk-open' : ''}" data-i="${i}">
+      <span class="grip" title="Drag to move (${MOVE_KEYS})">${GRIP_ICON}</span>
       <input class="c-name" value="${esc(c.name)}" placeholder="Column name" spellcheck="false" autocomplete="off">
       <input class="c-type" value="${esc(c.type)}" list="typeList" spellcheck="false" autocomplete="off">
-      <label class="chk" title="Primary key"><input type="checkbox" class="c-pk"${c.pk ? ' checked' : ''}></label>
-      <label class="chk" title="May be NULL"><input type="checkbox" class="c-null"${c.nullable ? ' checked' : ''}></label>
-      <label class="chk" title="UNIQUE"><input type="checkbox" class="c-unique"${c.unique ? ' checked' : ''}></label>
-      <label class="chk" title="AUTO_INCREMENT"><input type="checkbox" class="c-auto"${c.auto ? ' checked' : ''}></label>
+      <div class="c-flags">${FLAGS.map(([f, label]) => `<button class="pill" data-act="flag" data-f="${f}">${label}</button>`).join('')}</div>
       <div class="c-fk">${c.ref
-        ? `<button${keyed('fk-chip', refHue(c.ref, c.refCol))} data-act="fk" title="Change what this points to">→ ${esc(refLabel(c))}</button>` +
-          `<button class="icon-x" data-act="unlink" title="Not a foreign key">×</button>`
+        ? `<div${keyed('fk-chip', refHue(c.ref, c.refCol))}>` +
+            `<button class="fk-label" data-act="fk" title="Points to ${esc(target)}. Click to change">→ ${esc(target)}</button>` +
+            `<button class="fk-unlink" data-act="unlink" title="Not a foreign key" aria-label="Not a foreign key">×</button></div>`
         : `<button class="icon-btn link" data-act="fk" title="Make this a foreign key">${LINK_ICON}</button>`}</div>
-      <div class="c-actions">
-        <button class="icon-x" data-act="up" title="Move up"${i ? '' : ' disabled'}>↑</button>
-        <button class="icon-x" data-act="down" title="Move down"${i < dlg.cols.length - 1 ? '' : ' disabled'}>↓</button>
-        <button class="icon-x" data-act="del" title="Remove column">×</button>
-      </div>
-    </div>${dlg.fk?.row === i ? fkPanelMarkup() : ''}`).join('');
+      <div class="c-actions"><button class="icon-x" data-act="del" title="Remove column">×</button></div>
+    </div>${dlg.fk?.row === i ? fkPanelMarkup() : ''}`;
+  }).join('');
   refreshHints();
   if (dlg.fk) renderFkPanel();
 }
 
-// Placeholders and checkboxes that depend on other fields (Id is the PK unless another column says pk)
+// on: filled; locked: on because of the name, not a choice; gone: can't apply to this column
+function setPill(b, on, { locked = false, gone = false, title }) {
+  b.setAttribute('aria-pressed', on);
+  b.disabled = locked || gone;
+  b.classList.toggle('gone', gone);
+  b.title = title;
+}
+
+// Placeholders and pills that depend on other fields (Id is the PK unless another column says pk)
 function refreshHints() {
   const explicitPk = dlg.cols.some(c => c.pk && c.name.trim());
   const pkCount = dlg.cols.filter(c => c.pk && c.name.trim()).length;
   for (const row of tdCols.querySelectorAll('.col-row')) {
     const c = dlg.cols[+row.dataset.i];
+    const pill = f => row.querySelector(`.pill[data-f="${f}"]`);
     const isId = isIdName(c.name.trim());
     const autoPk = !explicitPk && isId;
-    const pk = row.querySelector('.c-pk');
-    pk.checked = c.pk || autoPk;
-    pk.disabled = autoPk;
+    const isPk = c.pk || autoPk;
+    setPill(pill('pk'), isPk, { locked: autoPk, title: autoPk ? 'Id is the primary key automatically' : 'Primary key' });
     // a primary key column in the table's colour, as in the diagram
-    const hue = pk.checked ? tableHue(SELF) : null;
-    for (const el of [pk, row.querySelector('.c-name')]) {
+    const hue = isPk ? tableHue(SELF) : null;
+    for (const el of [pill('pk'), row.querySelector('.c-name')]) {
       el.classList.toggle('h-hue', hue != null);
       el.style.setProperty('--h', hue ?? '');
     }
-    pk.parentNode.title = autoPk ? 'Id is the primary key automatically' : 'Primary key';
-    const nul = row.querySelector('.c-null');
-    nul.disabled = c.pk || autoPk;
-    if (nul.disabled) { nul.checked = false; c.nullable = false; }
+    // a primary key is never NULL
+    if (isPk) c.nullable = false;
+    setPill(pill('nullable'), c.nullable, { gone: isPk, title: 'May be NULL' });
+    setPill(pill('unique'), c.unique, { title: 'UNIQUE' });
     // auto_increment: only an integer column that is the primary key on its own; such an Id has it already
-    const auto = row.querySelector('.c-auto');
     const canAuto = (autoPk || (c.pk && pkCount === 1)) && INT_TYPES.has(typeParts(normType(c.type.trim() || 'int')).base);
     const implied = canAuto && isId;
     if (!canAuto) c.auto = false;
-    auto.checked = canAuto && (c.auto || implied);
-    auto.disabled = !canAuto || implied;
-    auto.parentNode.title = implied ? 'Id is numbered by the database automatically' : canAuto ? 'AUTO_INCREMENT' : 'AUTO_INCREMENT needs an integer primary key on its own';
+    setPill(pill('auto'), canAuto && (c.auto || implied), {
+      locked: implied, gone: !canAuto, title: implied ? 'Id is numbered by the database automatically' : 'AUTO_INCREMENT',
+    });
     row.querySelector('.c-type').placeholder = isId || c.ref ? 'int' : 'vc';
   }
 }
@@ -185,11 +210,7 @@ tdCols.addEventListener('input', e => {
   const c = dlg.cols[+row.dataset.i], cl = e.target.classList;
   if (cl.contains('c-name')) c.name = e.target.value;
   else if (cl.contains('c-type')) c.type = e.target.value;
-  else if (cl.contains('c-pk')) c.pk = e.target.checked;
-  else if (cl.contains('c-null')) c.nullable = e.target.checked;
-  else if (cl.contains('c-unique')) c.unique = e.target.checked;
-  else if (cl.contains('c-auto')) c.auto = e.target.checked;
-  e.target.classList.remove('invalid');
+  if (cl.contains('invalid')) clearError();
   refreshHints();
 });
 
@@ -200,13 +221,50 @@ tdCols.addEventListener('click', e => {
   if (act.startsWith('fk-')) return fkPanelClick(b);
   const i = +b.closest('.col-row').dataset.i, cols = dlg.cols;
   switch (act) {
-    case 'up': [cols[i - 1], cols[i]] = [cols[i], cols[i - 1]]; dlg.fk = null; break;
-    case 'down': [cols[i + 1], cols[i]] = [cols[i], cols[i + 1]]; dlg.fk = null; break;
+    case 'flag': cols[i][b.dataset.f] = b.getAttribute('aria-pressed') !== 'true'; return refreshHints();
     case 'del': cols.splice(i, 1); dlg.fk = null; break;
     case 'unlink': cols[i].ref = cols[i].refCol = null; if (dlg.fk?.row === i) dlg.fk = null; break;
     case 'fk': return openFk(i);
   }
   renderCols();
+});
+
+// ─── Moving a column: drag its grip, or Alt+↑/↓ in the row ───────────────────
+
+function moveCol(i, to) {
+  if (to < 0 || to >= dlg.cols.length || to === i) return false;
+  dlg.cols.splice(to, 0, ...dlg.cols.splice(i, 1));
+  dlg.fk = null;
+  renderCols();
+  return true;
+}
+
+tdCols.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !e.target.closest('.grip')) return;
+  e.preventDefault();
+  const from = +e.target.closest('.col-row').dataset.i;
+  clearError();
+  if (dlg.fk) { dlg.fk = null; renderCols(); } // the rows alone, nothing between them
+  const row = tdCols.querySelector(`.col-row[data-i="${from}"]`);
+  row.classList.add('dragging');
+  tdCols.classList.add('reordering');
+  tdCols.setPointerCapture(e.pointerId); // on the list, which stays while the row moves in it
+  // the row goes before the first other row whose middle is below the pointer
+  const move = ev => {
+    const before = [...tdCols.children].find(r => r !== row && ev.clientY < r.getBoundingClientRect().top + r.offsetHeight / 2) ?? null;
+    if (row.nextElementSibling !== before) tdCols.insertBefore(row, before);
+  };
+  const end = () => {
+    tdCols.removeEventListener('pointermove', move);
+    tdCols.removeEventListener('pointerup', end);
+    tdCols.removeEventListener('pointercancel', end);
+    tdCols.classList.remove('reordering');
+    dlg.cols = [...tdCols.children].map(r => dlg.cols[+r.dataset.i]);
+    renderCols();
+  };
+  tdCols.addEventListener('pointermove', move);
+  tdCols.addEventListener('pointerup', end);
+  tdCols.addEventListener('pointercancel', end);
 });
 
 function addColumn() {
@@ -345,10 +403,22 @@ function fkKeydown(e) {
 
 // ─── Save / delete ───────────────────────────────────────────────────────────
 
+// Why Save didn't, under the field it is about (lined up with it)
 function fail(input, msg) {
-  input?.classList.add('invalid');
-  input?.focus();
-  tdError.textContent = msg;
+  clearError();
+  input.classList.add('invalid');
+  input.focus();
+  const at = input.closest('.col-row, .field');
+  const err = document.createElement('div');
+  err.className = 'field-error';
+  err.textContent = msg;
+  err.style.paddingLeft = input.getBoundingClientRect().left - at.getBoundingClientRect().left + 'px';
+  at.after(err);
+}
+
+function clearError() {
+  for (const el of dlgEl.querySelectorAll('.field-error')) el.remove();
+  for (const el of dlgEl.querySelectorAll('.invalid')) el.classList.remove('invalid');
 }
 
 const REF_RE = /->\s*[\p{L}_][\p{L}\p{N}_$]*(?:\s*[.(]\s*[\p{L}_][\p{L}\p{N}_$]*\s*\)?)?/u;
@@ -499,25 +569,33 @@ $('#tdSave').onclick = saveTable;
 $('#tdCancel').onclick = closeTableEditor;
 $('#tdDelete').onclick = deleteTable;
 tdName.addEventListener('input', () => {
-  tdName.classList.remove('invalid');
+  if (tdName.classList.contains('invalid')) clearError();
   if (dlg.fk) renderFkPanel(); // "this table" shows the new name
 });
-dlgEl.addEventListener('pointerdown', e => { if (e.target === dlgEl) closeTableEditor(); });
+dlgEl.addEventListener('pointerdown', e => { if (e.target === dlgEl) requestClose(); });
 
 // Esc closes the chooser if it is open, else the dialog: from anywhere, since the focus leaves
 // the dialog when the row it was in is re-rendered (the chooser's own keys are handled below)
 document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape' || dlgEl.hidden || e.target.closest('.fk-panel')) return;
+  if (e.key !== 'Escape' || dlgEl.hidden || !$('#confirmDlg').hidden || e.target.closest('.fk-panel')) return;
   e.preventDefault();
-  if (dlg.fk) closeFk(); else closeTableEditor();
+  if (dlg.fk) closeFk(); else requestClose();
 });
 
 dlgEl.addEventListener('keydown', e => {
   if (e.target.closest('.fk-panel')) return fkKeydown(e);
-  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || e.target.type === 'checkbox') return;
+  const row = e.target.closest('.col-row');
+  if (row && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    // the same field of the moved row keeps the focus
+    const i = +row.dataset.i, to = i + (e.key === 'ArrowUp' ? -1 : 1);
+    const k = [...row.querySelectorAll('input, button')].indexOf(e.target);
+    if (moveCol(i, to)) tdCols.querySelectorAll(`.col-row[data-i="${to}"] :is(input, button)`)[k]?.focus();
+    return;
+  }
+  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
   e.preventDefault();
   // Enter in the last column's name adds another column; anywhere else it saves
-  const row = e.target.closest('.col-row');
   if (row && e.target.classList.contains('c-name') && +row.dataset.i === dlg.cols.length - 1 && e.target.value.trim()) addColumn();
   else saveTable();
 });

@@ -537,36 +537,65 @@ body.presenting .card-tl, body.presenting #storageNotice, body.presenting #selec
 .dlg input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .dlg input.invalid { border-color: var(--err); outline-color: var(--err); }
 .dlg input::placeholder { color: var(--faint); }
+.dlg input.c-type::placeholder { color: var(--muted); } /* the type a column gets when none is written: as good as typed */
 .field { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-weight: 500; }
 .field input { max-width: 280px; }
 .col-grid, .col-row {
   display: grid; gap: 6px; align-items: center;
-  grid-template-columns: minmax(110px, 1.2fr) minmax(90px, 1fr) 34px 34px 46px 58px minmax(120px, 1.1fr) 90px;
+  grid-template-columns: 16px minmax(110px, 1.2fr) minmax(90px, .8fr) 174px minmax(150px, 1.6fr) 28px;
 }
 .col-head { font-size: 11px; color: var(--muted); padding: 0 0 4px; text-transform: uppercase; letter-spacing: .06em; }
-.col-head span:nth-child(n+3):nth-child(-n+6) { text-align: center; }
 .col-row { padding: 3px 0; }
-.chk { display: grid; place-items: center; cursor: pointer; }
-.chk input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0; }
-.chk input:disabled { cursor: default; opacity: .6; }
-.c-fk { display: flex; align-items: center; gap: 2px; min-width: 0; }
+/* drag a row by its grip to move it */
+.grip { display: grid; place-items: center; height: 28px; color: var(--faint); cursor: grab; user-select: none; touch-action: none; }
+.grip svg { width: 10px; height: 16px; fill: currentColor; }
+.col-row:hover .grip { color: var(--muted); }
+.col-row.dragging { margin: 0 -6px; padding: 3px 6px; border-radius: 8px; background: var(--soft); box-shadow: var(--shadow); }
+#tdCols.reordering, #tdCols.reordering * { cursor: grabbing; user-select: none; }
+/* PK / NULL / UNIQUE / AUTO: filled when on, faint when off (outlined on hover); one that can't apply to the column is left out, in its place */
+.c-flags { display: grid; grid-template-columns: 30px 42px 54px 42px; gap: 2px; }
+.pill {
+  height: 24px; padding: 0; border: 1px solid transparent; border-radius: 12px; background: transparent;
+  font: 500 10px var(--mono); letter-spacing: .03em; color: var(--faint);
+}
+.pill:hover:not(:disabled), .pill:focus-visible { border-color: var(--line2); color: var(--fg); }
+.pill[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.pill[aria-pressed="true"]:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-fg); filter: brightness(1.08); }
+.pill:disabled { cursor: default; }
+.pill[aria-pressed="true"]:disabled { opacity: .6; } /* on because of the name (Id): not a choice */
+.pill.gone { visibility: hidden; }
+.c-fk { display: flex; align-items: center; min-width: 0; }
+/* what a foreign key points to; its × (not a foreign key) shows on hover */
 .fk-chip {
-  font: 12px var(--mono); color: var(--tok-ref); height: 28px; padding: 0 8px; border: 1px solid var(--line);
-  border-radius: 7px; background: var(--panel); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  position: relative; display: flex; min-width: 0; height: 28px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--panel); color: var(--tok-ref);
 }
 .fk-chip:hover { background: var(--hover); }
-.c-actions { display: flex; gap: 2px; justify-content: flex-end; }
+.fk-label {
+  font: 12px var(--mono); padding: 0 8px; border: 0; background: none; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fk-unlink {
+  position: absolute; right: 2px; top: 2px; width: 22px; height: 22px; padding: 0; line-height: 1;
+  border: 0; border-radius: 5px; background: var(--hover); color: var(--muted); opacity: 0;
+}
+.fk-chip:hover .fk-label, .fk-chip:focus-within .fk-label { padding-right: 28px; } /* room for the × */
+.fk-chip:hover .fk-unlink, .fk-chip:focus-within .fk-unlink { opacity: 1; }
+.fk-unlink:hover { background: var(--line2); color: var(--fg); }
+.c-actions { display: flex; justify-content: flex-end; }
 .icon-x {
   width: 28px; height: 28px; padding: 0; line-height: 1; border: 0; border-radius: 7px;
   background: transparent; color: var(--muted);
 }
 .icon-x:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
 .icon-x:disabled { opacity: .35; cursor: default; }
-.icon-btn.link { width: 30px; height: 28px; border: 1px solid var(--line); border-radius: 7px; }
+.icon-btn.link { width: 30px; height: 28px; border: 1px solid transparent; border-radius: 7px; color: var(--faint); }
 .icon-btn.link svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.col-row.fk-open .c-fk button { border-color: var(--accent); color: var(--accent); }
-#tdAdd { margin-top: 8px; }
-.dlg-error { color: var(--err); min-height: 20px; margin: 10px 0 4px; font-size: 12.5px; }
+.col-row.fk-open .fk-chip, .col-row.fk-open .icon-btn.link { border-color: var(--accent); color: var(--accent); }
+#tdAdd { margin: 8px 0 20px; }
+/* why Save didn't: under the field it is about */
+.field-error { color: var(--err); font-size: 12.5px; margin: 0 0 6px; }
+.field + .field-error { margin: -10px 0 12px; }
 .dlg-actions { display: flex; gap: 8px; align-items: center; }
 .dlg-actions .btn-outline, .dlg-actions .btn-primary { height: 32px; padding: 0 14px; border-radius: 8px; font-size: 13px; }
 .btn-outline.danger { color: var(--err); }
@@ -600,4 +629,4 @@ body.presenting .card-tl, body.presenting #storageNotice, body.presenting #selec
 #fkPreview { font: 12.5px var(--mono); color: var(--tok-ref); }
 /* the diagram's key colours: a primary key column and its box, an arrow's target, in the chooser the tables and their keys */
 .dlg .h-hue, .dlg input.c-name.h-hue, #fkPreview.h-hue { color: oklch(var(--key-l) var(--key-c) var(--h)); }
-.dlg input.h-hue { accent-color: oklch(var(--key-l) var(--key-c) var(--h)); }
+.dlg .pill.h-hue[aria-pressed="true"] { background: oklch(var(--key-l) var(--key-c) var(--h)); border-color: oklch(var(--key-l) var(--key-c) var(--h)); color: var(--accent-fg); }
