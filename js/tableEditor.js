@@ -688,36 +688,57 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ─── Right-click menu of a table ─────────────────────────────────────────────
+// ─── Right-click menus: a table's, and the empty canvas's ────────────────────
 
-const tableMenu = $('#tableMenu');
-const tableMenuItems = () => [...tableMenu.querySelectorAll('button')].filter(b => !b.hidden);
+const tableMenu = $('#tableMenu'), canvasMenu = $('#canvasMenu');
+let menuAt = null; // where the canvas was right-clicked, in diagram coordinates
+
+function openCtxMenu(menu, e) {
+  closeMenus();
+  menu.hidden = false;
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - r.width - 8)) + 'px';
+  menu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - r.height - 8)) + 'px';
+  menu.focus(); // for ↓ ↑ and the shortcuts; Esc closes it
+}
 
 svg.addEventListener('contextmenu', e => {
-  const g = document.elementFromPoint(e.clientX, e.clientY)?.closest('.tbl');
-  if (!g) return; // the empty canvas keeps the browser's menu
   e.preventDefault();
+  const g = document.elementFromPoint(e.clientX, e.clientY)?.closest('.tbl');
+  if (!g) {
+    menuAt = toWorld(e);
+    for (const b of canvasMenu.querySelectorAll('[data-needs-tables]')) b.disabled = !model.tables.length;
+    return openCtxMenu(canvasMenu, e);
+  }
   if (!selected.has(g.dataset.t)) setSelected([g.dataset.t]);
-  closeMenus();
   // several selected: only what works on all of them
   const n = selected.size;
   for (const el of tableMenu.querySelectorAll('.one')) el.hidden = n > 1;
   $('#tmDup').textContent = n > 1 ? `Duplicate ${n} tables` : 'Duplicate';
   $('#tmDel').textContent = n > 1 ? `Delete ${n} tables` : 'Delete';
-  tableMenu.hidden = false;
-  const r = tableMenu.getBoundingClientRect();
-  tableMenu.style.left = Math.max(8, Math.min(e.clientX, innerWidth - r.width - 8)) + 'px';
-  tableMenu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - r.height - 8)) + 'px';
-  tableMenu.focus(); // for ↓ ↑ and the shortcuts; Esc closes it
+  openCtxMenu(tableMenu, e);
 });
 
-tableMenu.addEventListener('keydown', e => {
+for (const menu of [tableMenu, canvasMenu]) menu.addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.stopPropagation(); return closeMenus(); } // the menu only, the selection stays
-  const items = tableMenuItems(), i = items.indexOf(document.activeElement);
+  const items = [...menu.querySelectorAll('button')].filter(b => !b.hidden && !b.disabled), i = items.indexOf(document.activeElement);
   const to = { ArrowDown: i + 1, ArrowUp: i < 0 ? -1 : i - 1, Home: 0, End: items.length - 1 }[e.key];
   if (to === undefined) return;
   e.preventDefault();
   items[(to + items.length) % items.length].focus();
+});
+
+canvasMenu.addEventListener('click', e => {
+  const cmd = e.target.closest('[data-cmd]')?.dataset.cmd;
+  if (!cmd) return;
+  closeMenus();
+  if (cmd === 'new') openTableEditor(null, { x: snap(menuAt.x - 20), y: snap(menuAt.y - 15) }); // as a double-click there
+  else if (cmd === 'find') openFinder();
+  else if (cmd === 'all') selectAll();
+  else if (cmd === 'layout') layoutAndShow();
+  else if (cmd === 'fit') fitView();
+  else if (cmd === 'zoom') zoom100();
+  else if (cmd === 'copy') copyImage();
 });
 
 tableMenu.addEventListener('click', e => {

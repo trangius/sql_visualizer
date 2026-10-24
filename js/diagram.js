@@ -1116,17 +1116,31 @@ document.addEventListener('keydown', e => {
 });
 
 const viewMiddle = () => { const r = svg.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
+const zoom100 = () => zoomTo(1, ...viewMiddle());
+const fitView = () => fit(presentView ? 2 : undefined);
 $('#zoomIn').onclick = () => zoomTo(view.s * 1.2, ...viewMiddle());
 $('#zoomOut').onclick = () => zoomTo(view.s / 1.2, ...viewMiddle());
-$('#zoomLabel').onclick = () => zoomTo(1, ...viewMiddle());
-$('#fitBtn').onclick = () => fit(presentView ? 2 : undefined);
+$('#zoomLabel').onclick = zoom100;
+$('#fitBtn').onclick = fitView;
+const selectAll = () => setSelected(model.tables.map(t => t.name));
+// ⌘A selects every table, ⇧1 fits the diagram to the screen, ⇧0 zooms to 100% (unless you are typing)
+document.addEventListener('keydown', e => {
+  if (!$('#tableDlg').hidden || !$('#confirmDlg').hidden || e.target.closest('input, textarea, [contenteditable]')) return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAll(); }
+  else if (e.shiftKey && !mod && !e.altKey && (e.code === 'Digit1' || e.code === 'Digit0')) {
+    e.preventDefault();
+    e.code === 'Digit1' ? fitView() : zoom100();
+  }
+});
 // Rearrange every table (the Auto layout button, loading an example, repairing overlaps)
 function autoLayout() {
   histRecord('layout', () => arrangeAll(model.tables, geometry.dims));
   saveDoc();
   drawDiagram();
 }
-$('#layoutBtn').onclick = () => { autoLayout(); fit(undefined, true); };
+const layoutAndShow = () => { autoLayout(); fit(undefined, true); };
+$('#layoutBtn').onclick = layoutAndShow;
 
 // Do any two boxes overlap? (e.g. positions saved while boxes had other sizes)
 function boxesOverlap() {

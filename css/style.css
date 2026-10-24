@@ -223,8 +223,10 @@ body.panel-collapsed #left, body.panel-collapsed #split { display: none; }
 .menu .ext { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .menu-sep { height: 1px; background: var(--line); margin: 4px; }
 .menu-left { right: auto; left: 0; width: 220px; }
-.ctx-menu { position: fixed; right: auto; width: 200px; outline: none; }
+.ctx-menu { position: fixed; right: auto; width: auto; min-width: 200px; outline: none; }
+.ctx-menu button { gap: 24px; }
 .menu button.danger { color: var(--err); }
+.menu button:disabled { opacity: .4; cursor: default; background: transparent; }
 #themeList, #notationList, #dataLangList { display: flex; flex-direction: column; gap: 1px; }
 #themeList button, #notationList button, #dataLangList button { justify-content: flex-start; gap: 8px; width: 100%; }
 #themeList .check, #notationList .check, #dataLangList .check { width: 12px; color: var(--accent); font-weight: 600; }

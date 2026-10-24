@@ -204,7 +204,10 @@
           <span>Drag a selected table</span><span>Move all selected</span>
           <span>↵ / ⌫ / ⌘D</span><span>Edit / delete / duplicate the selected tables</span>
           <span>Right-click a table</span><span>Edit it, add a column, duplicate or delete it</span>
+          <span>Right-click the canvas</span><span>New table, select all, layout, zoom, copy image</span>
           <span>⌘K</span><span>Find a table or column</span>
+          <span>⌘A</span><span>Select all tables</span>
+          <span>⇧1 / ⇧0</span><span>Fit to screen / zoom to 100%</span>
           <span>Drag canvas</span><span>Pan</span>
           <span>⌘ + scroll</span><span>Zoom</span>
           <span>Click a row</span><span>Jump to its line</span>
@@ -313,12 +316,12 @@
       <button id="zoomOut" class="tool icon" title="Zoom out" aria-label="Zoom out">
         <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M2.5 7h9"/></svg>
       </button>
-      <button id="zoomLabel" class="tool zoom-label" title="Reset to 100%">100%</button>
+      <button id="zoomLabel" class="tool zoom-label" title="Reset to 100% (⇧0)">100%</button>
       <button id="zoomIn" class="tool icon" title="Zoom in" aria-label="Zoom in">
         <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M7 2.5v9M2.5 7h9"/></svg>
       </button>
       <div class="vsep sm"></div>
-      <button id="fitBtn" class="tool" title="Fit diagram to view">
+      <button id="fitBtn" class="tool" title="Fit diagram to view (⇧1)">
         <svg width="14" height="14" class="ico" aria-hidden="true"><path d="M1.5 5V1.5H5M9 1.5h3.5V5M12.5 9v3.5H9M5 12.5H1.5V9"/></svg>
         Fit
       </button>
@@ -353,6 +356,18 @@
     <div class="one menu-sep"></div>
     <button data-cmd="dup" role="menuitem"><span id="tmDup">Duplicate</span><span class="ext">⌘D</span></button>
     <button class="danger" data-cmd="del" role="menuitem"><span id="tmDel">Delete</span><span class="ext">⌫</span></button>
+  </div>
+  <!-- right-click on the empty canvas -->
+  <div id="canvasMenu" class="menu ctx-menu" role="menu" tabindex="-1" hidden>
+    <button data-cmd="new" role="menuitem"><span>New table here</span><span class="ext">Double-click</span></button>
+    <button data-cmd="find" role="menuitem" data-needs-tables><span>Find…</span><span class="ext">⌘K</span></button>
+    <button data-cmd="all" role="menuitem" data-needs-tables><span>Select all tables</span><span class="ext">⌘A</span></button>
+    <div class="menu-sep"></div>
+    <button data-cmd="layout" role="menuitem" data-needs-tables><span>Auto layout</span></button>
+    <button data-cmd="fit" role="menuitem" data-needs-tables><span>Fit to screen</span><span class="ext">⇧1</span></button>
+    <button data-cmd="zoom" role="menuitem"><span>Zoom to 100%</span><span class="ext">⇧0</span></button>
+    <div class="menu-sep"></div>
+    <button data-cmd="copy" role="menuitem" data-needs-tables><span>Copy image</span></button>
   </div>
 </div>
 

@@ -597,7 +597,7 @@ applyDataView();
 // Menus: Export (app bar) and Text colours (editor header)
 const MENUS = [];
 function closeMenus() {
-  $('#tableMenu').hidden = true; // the diagram's right-click menu (see tableEditor.js)
+  $('#tableMenu').hidden = $('#canvasMenu').hidden = true; // the diagram's right-click menus (see tableEditor.js)
   for (const [btn, menu] of MENUS) {
     if ($(menu).contains(document.activeElement)) $(btn).focus(); // e.g. an item picked with Enter
     $(menu).hidden = true;
@@ -794,9 +794,9 @@ window.addEventListener('resize', () => { if (presentView) fit(2); });
 
 // Shortcuts are written the Mac way in the page; elsewhere they say Ctrl and Shift
 if (!/mac|iphone|ipad/i.test(navigator.userAgentData?.platform ?? navigator.platform)) {
-  const pc = s => s.replace('⇧⌘Z', 'Ctrl+Y').replace('⌘⇧', 'Ctrl+Shift+').replace(/⌘(?=\w)/g, 'Ctrl+')
+  const pc = s => s.replace('⇧⌘Z', 'Ctrl+Y').replace('⌘⇧', 'Ctrl+Shift+').replace(/⌘(?=\w)/g, 'Ctrl+').replace(/⇧(?=\w)/g, 'Shift+')
     .replace(/⇧/g, 'Shift').replace(/⌘/g, 'Ctrl').replace(/⌫/g, 'Del').replace(/↵/g, 'Enter');
-  for (const el of document.querySelectorAll('[title*="⌘"]')) el.title = pc(el.title);
+  for (const el of document.querySelectorAll('[title*="⌘"], [title*="⇧"]')) el.title = pc(el.title);
   for (const el of document.querySelectorAll('.menu .ext, .help-keys span')) {
     if (/[⌘⇧⌫↵]/.test(el.textContent)) el.textContent = pc(el.textContent);
   }
